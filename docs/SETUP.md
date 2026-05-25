@@ -15,12 +15,16 @@ NEXT_PUBLIC_SITE_URL=https://teate-teacher.vercel.app
 
 SQL Editor で **この順番** に実行:
 
-| 順番 | ファイル |
-|------|----------|
-| 1 | `setup.sql` |
-| 2 | `migrations/001_user_management.sql` |
-| 3 | `migrations/002_simplify_user_profile.sql` |
-| 4 | `migrations/003_admin_rls_by_role.sql` |
+| 順番 | ファイル | 説明 |
+|------|----------|------|
+| 1 | `migrations/004_core_tables_if_missing.sql` | 手当・月次ステータス等（空DB向け） |
+| 2 | `migrations/001_user_management.sql` | ユーザー管理・ロール |
+| 3 | `migrations/002_simplify_user_profile.sql` | 氏名カラム整理 |
+| 4 | `migrations/003_admin_rls_by_role.sql` | 管理者RLS（roleベース） |
+
+**または** まとめて `setup.sql` を実行した場合も、上記 001〜003 は引き続き実行してください。
+
+`003` で `monthly_applications does not exist` と出た場合 → 修正済みの `003` を再実行するか、先に `004` を実行してください。
 
 ## 3. Supabase 認証設定
 

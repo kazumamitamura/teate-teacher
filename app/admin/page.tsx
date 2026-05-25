@@ -208,8 +208,8 @@ export default function AdminDashboard() {
 
       <div className="max-w-6xl mx-auto p-8">
         {/* メインメニューカード */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          {/* 手当管理 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {/* 手当管理（プレビュー・Excel出力を含む） */}
           <button 
             onClick={() => router.push('/admin/allowances')}
             className="bg-gradient-to-br from-blue-500 to-blue-600 p-8 rounded-3xl shadow-xl hover:shadow-2xl transition-all text-left group transform hover:scale-105"
@@ -221,48 +221,10 @@ export default function AdminDashboard() {
               手当管理
             </h3>
             <p className="text-blue-100 text-xs mb-3">
-              部活動手当のExcel出力・設定
+              データプレビュー・Excel出力・設定
             </p>
             <div className="text-xs text-blue-200 bg-blue-700/30 px-2 py-1 rounded-lg inline-block">
               管理者
-            </div>
-          </button>
-
-          {/* データプレビュー（新規） */}
-          <button 
-            onClick={() => router.push('/admin/preview')}
-            className="bg-gradient-to-br from-indigo-500 to-indigo-600 p-8 rounded-3xl shadow-xl hover:shadow-2xl transition-all text-left group transform hover:scale-105"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="text-5xl">📊</div>
-            </div>
-            <h3 className="text-2xl font-extrabold text-white mb-2">
-              データプレビュー
-            </h3>
-            <p className="text-indigo-100 text-xs mb-3">
-              全職員の入力内容を確認
-            </p>
-            <div className="text-xs text-indigo-200 bg-indigo-700/30 px-2 py-1 rounded-lg inline-block">
-              スプレッドシート形式
-            </div>
-          </button>
-
-          {/* Excel出力 */}
-          <button 
-            onClick={() => router.push('/admin/export')}
-            className="bg-gradient-to-br from-green-500 to-green-600 p-8 rounded-3xl shadow-xl hover:shadow-2xl transition-all text-left group transform hover:scale-105"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="text-5xl">📊</div>
-            </div>
-            <h3 className="text-2xl font-extrabold text-white mb-2">
-              Excel出力
-            </h3>
-            <p className="text-green-100 text-xs mb-3">
-              個人・全体の月次・年次レポート出力
-            </p>
-            <div className="text-xs text-green-200 bg-green-700/30 px-2 py-1 rounded-lg inline-block">
-              全管理者
             </div>
           </button>
 
