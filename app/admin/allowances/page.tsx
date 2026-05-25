@@ -44,7 +44,7 @@ function AllowanceManagementContent() {
       <div className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-20">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="font-bold text-lg flex items-center gap-2">
-            <span className="text-2xl">💰</span> 手当管理（担当：友野・武田事務長）
+            <span className="text-2xl">💰</span> 手当管理
           </h1>
           <button
             type="button"

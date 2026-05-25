@@ -334,34 +334,93 @@ export default function Home() {
     fetchMonthlyStatus(userId, year, month)
   }, [selectedDate.getFullYear(), selectedDate.getMonth(), userId])
 
-  // 「申請する」ボタン処理
-  const handleSubmitMonth = async () => {
-    if (!userId) return
-    if (!confirm('この月の手当を申請しますか？\n申請後は承認されるか返却されるまで編集できなくなります。')) return
+  const countAllowancesInMonth = (items: Allowance[], refDate: Date) =>
+    items.filter((i) => {
+      const d = new Date(i.date)
+      return d.getMonth() === refDate.getMonth() && d.getFullYear() === refDate.getFullYear()
+    }).length
+
+  // 月次申請（DB更新）
+  const submitMonth = async (opts?: { skipConfirm?: boolean; successMessage?: string }) => {
+    if (!userId) return false
+    if (monthlyStatus !== 'DRAFT') {
+      alert('この月はすでに申請済み、または承認済みのため申請できません。')
+      return false
+    }
+    if (!opts?.skipConfirm && !confirm('この月の手当を申請しますか？\n申請後は承認されるか返却されるまで編集できなくなります。')) {
+      return false
+    }
     setSubmittingStatus(true)
     try {
       const year = selectedDate.getFullYear()
       const month = selectedDate.getMonth() + 1
       const targetMonth = `${year}-${String(month).padStart(2, '0')}`
-      const { error } = await supabase
-        .from('allowance_monthly_statuses')
-        .upsert({
-          user_id: userId,
-          target_month: targetMonth,
-          status: 'SUBMITTED'
-        }, { onConflict: 'user_id,target_month' })
+      const { error } = await supabase.from('allowance_monthly_statuses').upsert(
+        { user_id: userId, target_month: targetMonth, status: 'SUBMITTED' },
+        { onConflict: 'user_id,target_month' }
+      )
       if (error) {
         console.error('申請エラー:', error)
         alert('申請に失敗しました: ' + error.message)
-      } else {
-        setMonthlyStatus('SUBMITTED')
-        alert('申請しました。管理者の承認をお待ちください。')
+        return false
       }
+      setMonthlyStatus('SUBMITTED')
+      alert(opts?.successMessage ?? '申請しました。管理者の承認をお待ちください。')
+      return true
     } catch (err) {
       console.error(err)
       alert('申請処理中にエラーが発生しました。')
+      return false
+    } finally {
+      setSubmittingStatus(false)
     }
-    setSubmittingStatus(false)
+  }
+
+  const handleSubmitMonth = () => submitMonth()
+
+  // 入力画面から：未保存分を保存してから月次申請
+  const handleApplyFromInputModal = async () => {
+    if (isAllowLocked) {
+      alert(monthlyStatus === 'SUBMITTED' ? '申請中のため編集・再申請できません。' : '承認済のため申請できません。')
+      return
+    }
+    if (
+      !confirm(
+        '入力内容を保存し、この月の手当を申請しますか？\n申請後は承認または返却までは編集できません。'
+      )
+    ) {
+      return
+    }
+    setSubmittingStatus(true)
+    try {
+      if (activityId) {
+        const saved = await performSave({ closeModal: false, silent: true })
+        if (!saved) return
+      }
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('ユーザー情報が取得できません。再ログインしてください。')
+        return
+      }
+      const refreshed = await fetchData(user.id)
+      if (countAllowancesInMonth(refreshed, selectedDate) === 0) {
+        alert('申請する手当データがありません。内容を入力してから申請してください。')
+        return
+      }
+      const ok = await submitMonth({
+        skipConfirm: true,
+        successMessage: activityId
+          ? '保存し、申請しました。管理者の承認をお待ちください。'
+          : '申請しました。管理者の承認をお待ちください。',
+      })
+      if (ok) {
+        setShowInputModal(false)
+        setSelectedDates([])
+        setIsMultiSelectMode(false)
+      }
+    } finally {
+      setSubmittingStatus(false)
+    }
   }
 
   // 月次集計の自動計算
@@ -440,29 +499,24 @@ export default function Home() {
           console.error('⚠️ テーブル "allowances" が見つかりません。Supabaseの設定を確認してください。')
         }
         
-        // エラーが発生しても空配列を設定して続行（ユーザー体験を優先）
         setAllowances([])
-    } else {
-        console.log('手当データ取得成功:', allowData?.length, '件')
-        if (allowData && allowData.length > 0) {
-          console.log('取得したデータサンプル:', allowData[0])
-          console.log('全データ:', allowData)
-          
-          // amountを数値型に変換（文字列で保存されている場合の対策）
-          const normalizedData = allowData.map(item => ({
-            ...item,
-            amount: typeof item.amount === 'string' ? parseInt(item.amount, 10) : item.amount
-          }))
-          setAllowances(normalizedData)
-        } else {
-          setAllowances(allowData || [])
-        }
+        return []
       }
+
+      console.log('手当データ取得成功:', allowData?.length, '件')
+      const normalizedData = (allowData ?? []).map((item) => ({
+        ...item,
+        amount: typeof item.amount === 'string' ? parseInt(item.amount, 10) : item.amount,
+      }))
+      setAllowances(normalizedData)
+      return normalizedData
     } catch (err) {
       console.error('手当データ取得中の予期しないエラー:', err)
       setAllowances([])
+      return []
     }
     console.log('=== 手当データ取得終了 ===')
+    return []
   }
 
   const fetchSchoolCalendar = async () => {
@@ -661,14 +715,13 @@ export default function Home() {
     setCalculatedAmount(amt)
   }, [activityId, isDriving, destinationId, dayType, isAccommodation, isLongBreak, allowanceTypes, customAmount])
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const performSave = async (opts?: { closeModal?: boolean; silent?: boolean }): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       console.error('ユーザー情報が取得できません')
       alert('ユーザー情報が取得できません。再ログインしてください。')
-          return
-      }
+      return false
+    }
       
     // 保存対象の日付リスト（複数選択されている場合は全日付、そうでなければ単一日付）
     const targetDates = selectedDates.length > 0 ? selectedDates : [selectedDate]
@@ -684,7 +737,7 @@ export default function Home() {
       if (activityId === 'CUSTOM') {
         if (!customDescription || customAmount <= 0) {
           alert('手入力その他を選択した場合、内容と金額を必ず入力してください。')
-          return
+          return false
         }
       }
       
@@ -816,7 +869,7 @@ export default function Home() {
           } else {
             alert(`${dateStr} の保存に失敗しました:\n\n${errorMessage}`)
           }
-          return
+          return false
         }
         
         console.log('挿入成功:', dateStr, insertedData)
@@ -878,19 +931,26 @@ export default function Home() {
     }
     
     await fetchData(user.id)
-    setShowInputModal(false)
-    setSelectedDates([]) // 複数選択をクリア
-    
-    // selectedDateを保持（1日にリセットしない）
-    // 複数選択の場合は最初の日付を保持、単一選択の場合はその日付を保持
-    if (targetDates.length > 0) {
-      setSelectedDate(targetDates[0])
+
+    if (opts?.closeModal !== false) {
+      setShowInputModal(false)
+      setSelectedDates([])
+      if (targetDates.length > 0) {
+        setSelectedDate(targetDates[0])
+      }
     }
-    
-    const message = targetDates.length > 1 
-      ? `${targetDates.length}日分のデータを保存しました` 
-      : '保存しました'
-    alert(message)
+
+    if (!opts?.silent) {
+      const message =
+        targetDates.length > 1 ? `${targetDates.length}日分のデータを保存しました` : '保存しました'
+      alert(message)
+    }
+    return true
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await performSave()
   }
 
   const handleDelete = async (id: number, dateStr: string) => { 
@@ -1572,15 +1632,36 @@ export default function Home() {
             </div>
 
             {!isAllowLocked && (
-                <button 
-                    type="submit" 
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all transform hover:scale-[1.02] active:scale-[0.98]"
-                >
+                <div className="flex flex-col gap-2 sm:gap-3">
+                  <button
+                    type="submit"
+                    disabled={submittingStatus}
+                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+                  >
                     <span className="flex items-center justify-center gap-2">
-                        <span className="text-xl">💾</span>
-                        <span>この内容で保存する</span>
+                      <span className="text-xl">💾</span>
+                      <span>この内容で保存する</span>
                     </span>
-                </button>
+                  </button>
+                  {monthlyStatus === 'DRAFT' && (
+                    <button
+                      type="button"
+                      onClick={handleApplyFromInputModal}
+                      disabled={submittingStatus}
+                      className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-emerald-600 hover:to-emerald-700 active:from-emerald-700 active:to-emerald-800 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all disabled:opacity-50"
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="text-xl">📤</span>
+                        <span>{submittingStatus ? '処理中…' : '保存して今月の手当を申請する'}</span>
+                      </span>
+                    </button>
+                  )}
+                  {monthlyStatus === 'DRAFT' && (
+                    <p className="text-xs text-slate-500 text-center">
+                      申請後は管理者の承認または返却までは編集できません
+                    </p>
+                  )}
+                </div>
             )}
           </form>
             </div>
