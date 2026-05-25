@@ -1,23 +1,21 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { login, signup } from '../auth/actions'
+import { Suspense, useState, useTransition } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { signInWithGoogle } from '../auth/actions'
 
-export default function LoginPage() {
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [error, setError] = useState<string>('')
+function LoginContent() {
+  const searchParams = useSearchParams()
+  const initialError = searchParams.get('error') ?? ''
+  const [error, setError] = useState<string>(initialError)
   const [isPending, startTransition] = useTransition()
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const allowedDomain = process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN
+
+  const handleGoogleSignIn = () => {
     setError('')
-    
-    const formData = new FormData(e.currentTarget)
-    
     startTransition(async () => {
-      const action = isSignUp ? signup : login
-      const result = await action(formData)
-      
+      const result = await signInWithGoogle()
       if (result?.error) {
         setError(result.error)
       }
@@ -25,169 +23,139 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* ロゴ・タイトル */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold text-gray-900 mb-2">💰</h1>
-          <h2 className="text-2xl font-bold text-gray-900">手当管理システム</h2>
-          <p className="text-sm text-gray-600 mt-2">部活動指導手当の入力・管理</p>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+      {/* 背景グラデーション・装飾 */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-500/30 blur-3xl" />
+        <div className="absolute -bottom-32 -right-32 h-[28rem] w-[28rem] rounded-full bg-fuchsia-500/20 blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-md">
+        {/* ヘッダー */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-fuchsia-500 shadow-lg shadow-indigo-500/40 mb-5">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-8 w-8 text-white"
+            >
+              <path d="M12 2 4 6v6c0 5 3.5 9.5 8 10 4.5-.5 8-5 8-10V6l-8-4z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-white via-indigo-200 to-fuchsia-200 bg-clip-text text-transparent">
+            手当管理システム
+          </h1>
+          <p className="mt-3 text-sm text-slate-400">
+            特殊勤務手当の入力・申請・集計をシンプルに
+          </p>
         </div>
 
         {/* メインカード */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-          {/* タブ切り替え */}
-          <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(false)
-                setError('')
-              }}
-              className={`flex-1 py-2 px-4 rounded-lg font-bold transition ${
-                !isSignUp
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              ログイン
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(true)
-                setError('')
-              }}
-              className={`flex-1 py-2 px-4 rounded-lg font-bold transition ${
-                isSignUp
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              新規登録
-            </button>
-          </div>
+        <div className="relative rounded-3xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 p-8">
+          <div className="absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+
+          <h2 className="text-xl font-semibold text-white mb-2">ログイン</h2>
+          <p className="text-sm text-slate-400 mb-6">
+            学校発行のGoogleアカウントでログインしてください。
+          </p>
 
           {/* エラーメッセージ */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
-              <p className="text-sm text-red-700 font-bold whitespace-pre-line">{error}</p>
+            <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4">
+              <p className="text-sm text-red-200 leading-relaxed whitespace-pre-line">
+                {error}
+              </p>
             </div>
           )}
 
-          {/* フォーム */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* 氏名（新規登録時のみ。帳票用氏名として登録され、変更はアカウントから可能） */}
-            {isSignUp && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    姓（Last Name）
-                  </label>
-                  <input
-                    type="text"
-                    name="lastName"
-                    placeholder="例: 三田村"
-                    required
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition font-bold text-gray-900"
-                    disabled={isPending}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-900 mb-2">
-                    名（First Name）
-                  </label>
-                  <input
-                    type="text"
-                    name="firstName"
-                    placeholder="例: 和真"
-                    required
-                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition font-bold text-gray-900"
-                    disabled={isPending}
-                  />
-                </div>
-                <p className="col-span-2 text-xs text-gray-600 mt-1">帳票用の氏名として登録されます。変更はログイン後「👤 アカウント」から行えます。</p>
-              </div>
-            )}
-
-            {/* メールアドレス */}
-            <div>
-              <label className="block text-sm font-bold text-gray-900 mb-2">
-                メールアドレス
-              </label>
-              <input
-                type="email"
-                name="email"
-                placeholder="your.email@example.com"
-                required
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition font-bold text-gray-900"
-                disabled={isPending}
-              />
-            </div>
-
-            {/* パスワード */}
-            <div>
-              <label className="block text-sm font-bold text-gray-900 mb-2">
-                パスワード
-              </label>
-              <input
-                type="password"
-                name="password"
-                placeholder={isSignUp ? '6文字以上' : '••••••••'}
-                required
-                minLength={6}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition font-bold text-gray-900"
-                disabled={isPending}
-              />
-              {isSignUp && (
-                <p className="text-xs text-gray-600 mt-1">6文字以上で設定してください</p>
-              )}
-            </div>
-
-            {/* 送信ボタン */}
-            <button
-              type="submit"
-              disabled={isPending}
-              className="w-full py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold rounded-lg shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isPending ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>処理中...</span>
-                </>
-              ) : (
-                <span>{isSignUp ? '新規登録してログイン' : 'ログイン'}</span>
-              )}
-            </button>
-
-            {/* パスワードを忘れた方（ログイン時のみ表示） */}
-            {!isSignUp && (
-              <div className="text-center mt-3">
-                <a
-                  href="/forgot-password"
-                  className="text-sm text-blue-600 hover:text-blue-700 font-bold underline"
+          {/* Googleログインボタン */}
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            disabled={isPending}
+            className="group relative w-full overflow-hidden rounded-xl bg-white px-6 py-4 text-slate-900 font-semibold shadow-lg transition-all duration-200 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+          >
+            <span className="absolute inset-0 bg-gradient-to-r from-indigo-50 via-white to-purple-50 opacity-0 transition-opacity group-hover:opacity-100" />
+            {isPending ? (
+              <>
+                <svg
+                  className="relative animate-spin h-5 w-5 text-slate-700"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
                 >
-                  パスワードを忘れた方はこちら
-                </a>
-              </div>
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <span className="relative">Googleへ移動中…</span>
+              </>
+            ) : (
+              <>
+                <svg className="relative h-5 w-5" viewBox="0 0 48 48" aria-hidden="true">
+                  <path
+                    fill="#FFC107"
+                    d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"
+                  />
+                  <path
+                    fill="#FF3D00"
+                    d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"
+                  />
+                  <path
+                    fill="#4CAF50"
+                    d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"
+                  />
+                  <path
+                    fill="#1976D2"
+                    d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"
+                  />
+                </svg>
+                <span className="relative">Googleでログイン</span>
+              </>
             )}
-          </form>
+          </button>
 
-          {/* 補足情報 */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <p className="text-xs text-gray-600 text-center">
-              {isSignUp ? (
+          {/* 区切り線 */}
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-[11px] uppercase tracking-widest text-slate-500">
+              Secured by Google
+            </span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+
+          {/* 注意書き */}
+          <div className="rounded-xl bg-slate-900/40 border border-white/5 p-4">
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {allowedDomain ? (
                 <>
-                  登録後すぐにログイン状態になります。<br />
-                  メール確認は不要です。
+                  <span className="font-semibold text-slate-200">
+                    @{allowedDomain}
+                  </span>{' '}
+                  のメールアドレスを持つアカウントのみログインできます。
+                  <br />
+                  個人のGoogleアカウントではログインできません。
                 </>
               ) : (
                 <>
-                  アカウントをお持ちでない方は<br />
-                  「新規登録」タブから登録してください。
+                  学校発行のGoogleアカウントでログインしてください。
                 </>
               )}
             </p>
@@ -195,12 +163,26 @@ export default function LoginPage() {
         </div>
 
         {/* フッター */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            © 2026 手当管理システム - 学校法人向け
+        <div className="mt-8 text-center">
+          <p className="text-xs text-slate-500">
+            © 2026 手当管理システム
           </p>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   )
 }

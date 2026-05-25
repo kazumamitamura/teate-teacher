@@ -1,10 +1,8 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+  let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,10 +13,8 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -27,26 +23,25 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // ユーザー情報を取得
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // ログイン画面とauth関連のパスは認証不要
-  if (
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/auth') ||
-    request.nextUrl.pathname.startsWith('/forgot-password') ||
-    request.nextUrl.pathname.startsWith('/reset-password')
-  ) {
-    // すでにログイン済みの場合は / にリダイレクト（パスワードリセットページを除く）
-    if (user && !request.nextUrl.pathname.startsWith('/reset-password')) {
+  const { pathname } = request.nextUrl
+
+  // 認証不要のパス
+  const isPublicPath =
+    pathname.startsWith('/login') || pathname.startsWith('/auth')
+
+  if (isPublicPath) {
+    // 既ログイン状態でログインページを開いたらトップへ
+    if (user && pathname.startsWith('/login')) {
       return NextResponse.redirect(new URL('/', request.url))
     }
     return supabaseResponse
   }
 
-  // ログインが必要なページで未ログインの場合は /login にリダイレクト
+  // 未ログインはログインページへ
   if (!user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
@@ -63,6 +58,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
-};
+}
