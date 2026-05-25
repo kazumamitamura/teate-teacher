@@ -333,7 +333,29 @@ export default function AdminDashboard() {
         </div>
 
         {/* 追加メニュー */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* ユーザー管理（新規） */}
+          <button
+            onClick={() => router.push('/admin/users')}
+            className="bg-gradient-to-br from-indigo-500 to-fuchsia-600 p-8 rounded-3xl shadow-xl hover:shadow-2xl transition-all text-left group transform hover:scale-105 border-4 border-indigo-300/40"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="text-5xl">👥</div>
+              <span className="bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-bold animate-pulse">
+                NEW
+              </span>
+            </div>
+            <h3 className="text-2xl font-extrabold text-white mb-2">
+              ユーザー管理
+            </h3>
+            <p className="text-indigo-100 text-xs mb-3">
+              教員のCSV一括登録・権限編集・追加削除
+            </p>
+            <div className="text-xs text-indigo-100 bg-indigo-700/40 px-2 py-1 rounded-lg inline-block">
+              スーパー管理者
+            </div>
+          </button>
+
           {/* 承認・返却管理 */}
           <button 
             onClick={() => router.push('/admin/approvals')}
