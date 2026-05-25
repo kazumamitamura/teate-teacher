@@ -7,10 +7,8 @@ import { useRouter } from 'next/navigation'
 import Calendar from 'react-calendar'
 import 'react-calendar/dist/Calendar.css'
 import { ACTIVITY_TYPES, DESTINATIONS, calculateAmount, calculateAmountFromMaster, canSelectActivity } from '@/utils/allowanceRules'
-import { isAdmin as checkIsAdminRole } from '@/utils/adminRoles'
+import { fetchCurrentProfile, isAdminRole } from '@/utils/userProfile'
 import { logout } from './auth/actions'
-
-const ADMIN_EMAILS = ['mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp'].map(e => e.toLowerCase())
 
 type MonthlyStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED'
 
@@ -146,8 +144,7 @@ export default function Home() {
   
   // 入力フォームモーダル用
   const [showInputModal, setShowInputModal] = useState(false)
-  const [inputLastName, setInputLastName] = useState('')
-  const [inputFirstName, setInputFirstName] = useState('')
+  const [inputDisplayName, setInputDisplayName] = useState('')
 
   const [activityId, setActivityId] = useState('')
   const [destinationId, setDestinationId] = useState('inside_short')
@@ -179,13 +176,12 @@ export default function Home() {
       console.log('ユーザー認証成功:', user.email)
       setUserEmail(user.email || '')
       setUserId(user.id)
-      const emailLower = user.email?.toLowerCase() || ''
-      if (ADMIN_EMAILS.includes(emailLower) || checkIsAdminRole(emailLower)) {
+
+      const profile = await fetchCurrentProfile(supabase)
+      if (profile && isAdminRole(profile.role)) {
         setIsAdmin(true)
-        console.log('管理者権限あり')
       }
-      
-      // プロフィール取得
+
       await fetchProfile(user.id)
 
       // データ取得（並行実行）
@@ -229,16 +225,15 @@ export default function Home() {
 
   // 氏名保存処理
   const handleSaveProfile = async () => {
-      if (!inputLastName || !inputFirstName) {
-          alert('姓と名の両方を入力してください')
+      const fullName = inputDisplayName.trim()
+      if (!fullName) {
+          alert('氏名を入力してください')
           return
       }
       if (!userId) {
           alert('ユーザーIDが取得できませんでした。ページをリロードしてください。')
           return
       }
-      
-      const fullName = `${inputLastName.trim()} ${inputFirstName.trim()}`
       
       console.log('=== 氏名保存開始 ===')
       console.log('User ID:', userId)
@@ -308,8 +303,7 @@ export default function Home() {
           console.log('氏名登録成功:', fullName)
           setUserName(fullName)
           setShowProfileModal(false)
-          setInputLastName('')
-          setInputFirstName('')
+          setInputDisplayName('')
           // プロフィールを再取得して確認
           await fetchProfile(userId)
           alert('氏名を登録しました！')
@@ -1111,14 +1105,7 @@ export default function Home() {
                 <div className="flex gap-2">
                   <button 
                       onClick={() => {
-                          if (userName) {
-                              const nameParts = userName.split(' ')
-                              setInputLastName(nameParts[0] || '')
-                              setInputFirstName(nameParts.slice(1).join(' ') || '')
-                          } else {
-                              setInputLastName('')
-                              setInputFirstName('')
-                          }
+                          setInputDisplayName(userName || '')
                           setShowProfileModal(true)
                       }} 
                       className="text-xs sm:text-sm font-bold text-slate-600 bg-slate-100 px-3 sm:px-4 py-2 rounded-full border border-slate-200 hover:bg-slate-200 active:bg-slate-300 transition touch-manipulation flex-1 sm:flex-none whitespace-nowrap"
@@ -1631,11 +1618,10 @@ export default function Home() {
                   </div>
                   <p className="text-sm text-slate-600 mb-6 text-center">
                       {userName ? (
-                        <>帳票用の氏名を変更できます。新規登録時に入力した氏名はここで修正できます。</>
+                        <>帳票用の氏名を変更できます。</>
                       ) : (
-                        <>帳票用の氏名が未登録です。姓・名を入力して登録してください。（通常は新規登録時に登録済みです）</>
+                        <>帳票用の氏名が未登録です。氏名を入力して登録してください。</>
                       )}
-                      <br/>姓と名の間に半角スペースが自動で入ります。
                   </p>
                   
                   {/* 現在の氏名表示（変更時のみ） */}
@@ -1648,22 +1634,12 @@ export default function Home() {
                   
                   <div className="space-y-4 mb-6">
                       <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-2">姓（Last Name）</label>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">氏名</label>
                           <input 
                               type="text" 
-                              value={inputLastName} 
-                              onChange={(e) => setInputLastName(e.target.value)} 
-                              placeholder="例: 三田村" 
-                              className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg font-bold text-black focus:border-blue-500 focus:outline-none" 
-                          />
-                      </div>
-                      <div>
-                          <label className="block text-sm font-bold text-gray-700 mb-2">名（First Name）</label>
-                          <input 
-                              type="text" 
-                              value={inputFirstName} 
-                              onChange={(e) => setInputFirstName(e.target.value)} 
-                              placeholder="例: 和真" 
+                              value={inputDisplayName} 
+                              onChange={(e) => setInputDisplayName(e.target.value)} 
+                              placeholder="例: 三田村 和真" 
                               className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg font-bold text-black focus:border-blue-500 focus:outline-none" 
                           />
                       </div>
@@ -1673,7 +1649,7 @@ export default function Home() {
                       <div className="flex gap-3">
                           {userName && (
                               <button 
-                                  onClick={() => { setShowProfileModal(false); setInputLastName(''); setInputFirstName(''); }}
+                                  onClick={() => { setShowProfileModal(false); setInputDisplayName(''); }}
                                   className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-4 rounded-xl transition shadow-lg text-lg"
                               >
                                   キャンセル

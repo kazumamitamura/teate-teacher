@@ -1,12 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { logout } from '@/app/auth/actions'
-
-const ADMIN_EMAILS = ['mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp'].map(e => e.toLowerCase())
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 
 type AllowanceType = {
   id: number
@@ -20,9 +18,9 @@ type AllowanceType = {
 
 export default function AllowanceSettingsPage() {
   const router = useRouter()
-  const supabase = createClient()
-  
-  const [loading, setLoading] = useState(true)  // 初期値をtrueに設定（初回読み込み表示）
+  const { loading: authLoading, authorized, supabase } = useRequireAdmin()
+
+  const [loading, setLoading] = useState(true)
   const [allowanceTypes, setAllowanceTypes] = useState<AllowanceType[]>([])  // 空配列で初期化
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState({ display_name: '', base_amount: 0 })
@@ -35,27 +33,13 @@ export default function AllowanceSettingsPage() {
   })
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { 
-          router.push('/login')
-          return 
-        }
-        if (!ADMIN_EMAILS.includes(user.email?.toLowerCase() || '')) {
-          alert('管理者権限がありません')
-          router.push('/')
-          return
-        }
-        await fetchAllowanceTypes()
-      } catch (error) {
-        console.error('認証エラー:', error)
-        setLoading(false)
-      }
-    }
-    checkAuth()
+    if (authorized) fetchAllowanceTypes()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [authorized])
+
+  if (authLoading || !authorized) {
+    return <div className="p-10 text-center">確認中...</div>
+  }
 
   const fetchAllowanceTypes = async () => {
     setLoading(true)

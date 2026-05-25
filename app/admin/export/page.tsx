@@ -1,20 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
-
-const ADMIN_EMAILS = [
-  'mitamuraka@haguroko.ed.jp',
-  'tomonoem@haguroko.ed.jp'
-].map(email => email.toLowerCase())
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 
 export default function ExportPage() {
   const router = useRouter()
-  const supabase = createClient()
-  
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { loading: authLoading, authorized, supabase } = useRequireAdmin()
+
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState<any[]>([])
   const [selectedUser, setSelectedUser] = useState('')
@@ -22,18 +16,9 @@ export default function ExportPage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || !ADMIN_EMAILS.includes(user.email?.toLowerCase() || '')) {
-        alert('管理者権限がありません')
-        router.push('/')
-        return
-      }
-      setIsAdmin(true)
-      fetchUsers()
-    }
-    checkAdmin()
-  }, [])
+    if (authorized) fetchUsers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorized])
 
   const fetchUsers = async () => {
     console.log('ユーザープロフィール取得中...')
@@ -464,7 +449,7 @@ export default function ExportPage() {
     }
   }
 
-  if (!isAdmin) return <div className="p-10 text-center">確認中...</div>
+  if (authLoading || !authorized) return <div className="p-10 text-center">確認中...</div>
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">

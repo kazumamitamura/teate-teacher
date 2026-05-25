@@ -1,45 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-import { isAdmin as checkIsAdmin, getUserRoles } from '@/utils/adminRoles'
-import { handleSupabaseError, logSupabaseError } from '@/utils/supabase/errorHandler'
+import { getRoleLabel } from '@/utils/userProfile'
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 import { logout } from '../auth/actions'
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const supabase = createClient()
-  
-  const [isAuthorized, setIsAuthorized] = useState(false)
+  const { profile, loading: authLoading, authorized, supabase } = useRequireAdmin()
   const [loading, setLoading] = useState(true)
-  const [userRoles, setUserRoles] = useState<string[]>([])
   const [stats, setStats] = useState<Record<string, number>>({})
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [clearingSchedules, setClearingSchedules] = useState(false)
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('ログインが必要です')
-        router.push('/login')
-        return
-      }
-
-      if (!checkIsAdmin(user.email || '')) {
-        alert('管理者権限がありません')
-        router.push('/')
-        return
-      }
-
-      setIsAuthorized(true)
-      setUserRoles(getUserRoles(user.email || ''))
-      fetchStats()
-    }
-    checkAuth()
-  }, [])
+    if (authorized) fetchStats()
+  }, [authorized])
 
   const fetchStats = async () => {
     setLoading(true)
@@ -199,7 +177,7 @@ export default function AdminDashboard() {
     setClearingSchedules(false)
   }
 
-  if (!isAuthorized) return <div className="p-10 text-center">確認中...</div>
+  if (authLoading || !authorized) return <div className="p-10 text-center">確認中...</div>
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -209,13 +187,11 @@ export default function AdminDashboard() {
           <div>
             <h1 className="text-3xl font-bold mb-1">手当管理システム</h1>
             <p className="text-slate-300 text-sm">管理者ダッシュボード</p>
-            {userRoles.length > 0 && (
-              <div className="mt-2 flex gap-2">
-                {userRoles.map(role => (
-                  <span key={role} className="bg-slate-700 text-slate-200 px-2 py-1 rounded text-xs font-bold">
-                    {role}
-                  </span>
-                ))}
+            {profile && (
+              <div className="mt-2">
+                <span className="bg-slate-700 text-slate-200 px-2 py-1 rounded text-xs font-bold">
+                  {getRoleLabel(profile.role)}
+                </span>
               </div>
             )}
           </div>
@@ -248,7 +224,7 @@ export default function AdminDashboard() {
               部活動手当のExcel出力・設定
             </p>
             <div className="text-xs text-blue-200 bg-blue-700/30 px-2 py-1 rounded-lg inline-block">
-              担当：友野・武田事務長
+              管理者
             </div>
           </button>
 
@@ -443,7 +419,7 @@ export default function AdminDashboard() {
             <div className="bg-slate-50 p-4 rounded-lg">
               <div className="text-sm text-slate-500 mb-1">アクセス権限</div>
               <div className="text-lg font-bold text-slate-800">
-                {userRoles.length}個の管理権限
+                {profile ? getRoleLabel(profile.role) : '—'}
               </div>
             </div>
             <div className="bg-slate-50 p-4 rounded-lg">

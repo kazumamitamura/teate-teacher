@@ -1,17 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
 import {
-  fetchCurrentProfile,
-  isAdminRole,
   isSuperAdminRole,
   ROLE_LABELS,
   type UserProfile,
   type UserRole,
 } from '@/utils/userProfile'
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 import { logout } from '@/app/auth/actions'
 
 type SortKey = 'display_name' | 'email' | 'role' | 'linked'
@@ -54,11 +52,8 @@ function normalizeRole(raw: string | undefined | null): UserRole {
 }
 
 export default function AdminUsersPage() {
-  const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
-
-  const [authChecking, setAuthChecking] = useState(true)
-  const [me, setMe] = useState<UserProfile | null>(null)
+  const { profile: me, loading: authLoading, authorized, supabase: adminSupabase } = useRequireAdmin()
+  const supabase = useMemo(() => adminSupabase ?? createClient(), [adminSupabase])
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -76,27 +71,10 @@ export default function AdminUsersPage() {
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null)
   const [bulkRunning, setBulkRunning] = useState(false)
 
-  // --------------- アクセス制御 ---------------
   useEffect(() => {
-    const check = async () => {
-      const profile = await fetchCurrentProfile(supabase)
-      if (!profile) {
-        alert('プロフィールが見つかりません。再ログインしてください。')
-        await logout()
-        return
-      }
-      if (!isAdminRole(profile.role)) {
-        alert('この画面は管理者専用です。')
-        router.push('/')
-        return
-      }
-      setMe(profile)
-      setAuthChecking(false)
-      await fetchUsers()
-    }
-    check()
+    if (authorized) fetchUsers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [authorized])
 
   // --------------- 一覧取得 ---------------
   const fetchUsers = useCallback(async () => {
@@ -431,7 +409,7 @@ export default function AdminUsersPage() {
   }
 
   // --------------- レンダリング ---------------
-  if (authChecking) {
+  if (authLoading || !authorized || !me) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center">
         <div className="flex items-center gap-3">

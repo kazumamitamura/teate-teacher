@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-import { isAdmin as checkIsAdmin } from '@/utils/adminRoles'
 import { logout } from '../../auth/actions'
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 
 type MonthlyStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED'
 
@@ -19,9 +18,8 @@ type UserRow = {
 
 export default function ApprovalsPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const { loading: authLoading, authorized, supabase } = useRequireAdmin()
 
-  const [isAuthorized, setIsAuthorized] = useState(false)
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserRow[]>([])
   const [targetYear, setTargetYear] = useState(new Date().getFullYear())
@@ -30,28 +28,8 @@ export default function ApprovalsPage() {
   const [bulkProcessing, setBulkProcessing] = useState(false)
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('ログインが必要です')
-        router.push('/login')
-        return
-      }
-      if (!checkIsAdmin(user.email || '')) {
-        alert('管理者権限がありません')
-        router.push('/')
-        return
-      }
-      setIsAuthorized(true)
-    }
-    checkAuth()
-  }, [])
-
-  useEffect(() => {
-    if (isAuthorized) {
-      fetchData()
-    }
-  }, [isAuthorized, targetYear, targetMonth])
+    if (authorized) fetchData()
+  }, [authorized, targetYear, targetMonth])
 
   const targetMonthStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}`
 
@@ -227,7 +205,7 @@ export default function ApprovalsPage() {
     }
   }
 
-  if (!isAuthorized) return <div className="p-10 text-center">確認中...</div>
+  if (authLoading || !authorized) return <div className="p-10 text-center">確認中...</div>
 
   const submittedCount = users.filter(u => u.status === 'SUBMITTED').length
 

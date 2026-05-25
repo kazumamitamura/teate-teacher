@@ -36,11 +36,6 @@ $$;
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 管理者は全プロフィールを閲覧可能（管理画面用）
-DROP POLICY IF EXISTS "Admins can view all profiles" ON public.user_profiles;
-CREATE POLICY "Admins can view all profiles" ON public.user_profiles FOR SELECT
-  USING (email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp'));
-
 CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON public.user_profiles(email);
 
 -- updated_at 自動更新
@@ -116,40 +111,10 @@ CREATE POLICY "Users can insert their own monthly applications" ON public.monthl
 CREATE POLICY "Users can update their own monthly applications" ON public.monthly_applications FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own monthly applications" ON public.monthly_applications FOR DELETE USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Admins can view all monthly applications" ON public.monthly_applications;
-CREATE POLICY "Admins can view all monthly applications" ON public.monthly_applications FOR SELECT
-  USING (EXISTS (SELECT 1 FROM public.user_profiles up WHERE up.user_id = auth.uid() AND up.email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp')));
+-- 管理者ポリシーは migrations/001, 003 で role ベースに設定
 
 
--- ========== D. inquiries ==========
-
-CREATE TABLE IF NOT EXISTS public.inquiries (
-  id BIGSERIAL PRIMARY KEY,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  user_email TEXT NOT NULL,
-  user_name TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  message TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'replied', 'closed')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_inquiries_user_id ON public.inquiries(user_id);
-CREATE INDEX IF NOT EXISTS idx_inquiries_status ON public.inquiries(status);
-CREATE INDEX IF NOT EXISTS idx_inquiries_created_at ON public.inquiries(created_at DESC);
-
-ALTER TABLE public.inquiries ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view their own inquiries" ON public.inquiries FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can create their own inquiries" ON public.inquiries FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Admins can view all inquiries" ON public.inquiries FOR SELECT
-  USING (EXISTS (SELECT 1 FROM public.user_profiles up WHERE up.user_id = auth.uid() AND up.email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp')));
-CREATE POLICY "Admins can update all inquiries" ON public.inquiries FOR UPDATE
-  USING (EXISTS (SELECT 1 FROM public.user_profiles up WHERE up.user_id = auth.uid() AND up.email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp')));
-
-
--- ========== E. documents ==========
+-- ========== D. documents ==========
 
 CREATE TABLE IF NOT EXISTS public.documents (
   id BIGSERIAL PRIMARY KEY,
@@ -166,13 +131,10 @@ CREATE INDEX IF NOT EXISTS idx_documents_created_at ON public.documents(created_
 ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Authenticated users can view documents" ON public.documents FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "Admins can insert documents" ON public.documents FOR INSERT
-  WITH CHECK (EXISTS (SELECT 1 FROM public.user_profiles up WHERE up.user_id = auth.uid() AND up.email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp')));
-CREATE POLICY "Admins can delete documents" ON public.documents FOR DELETE
-  USING (EXISTS (SELECT 1 FROM public.user_profiles up WHERE up.user_id = auth.uid() AND up.email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp')));
+-- 管理者ポリシーは migrations/003 で追加
 
 
--- ========== F. annual_schedules ==========
+-- ========== E. annual_schedules ==========
 
 CREATE TABLE IF NOT EXISTS public.annual_schedules (
   id BIGSERIAL PRIMARY KEY,
@@ -188,11 +150,10 @@ CREATE INDEX IF NOT EXISTS idx_annual_schedules_date ON public.annual_schedules(
 ALTER TABLE public.annual_schedules ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Anyone can view annual schedules" ON public.annual_schedules FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "Admins can manage annual schedules" ON public.annual_schedules FOR ALL
-  USING (EXISTS (SELECT 1 FROM public.user_profiles up WHERE up.user_id = auth.uid() AND up.email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp')));
+-- 管理者ポリシーは migrations/003 で追加
 
 
--- ========== G. allowance_types ==========
+-- ========== F. allowance_types ==========
 
 CREATE TABLE IF NOT EXISTS public.allowance_types (
   id BIGSERIAL PRIMARY KEY,
@@ -209,11 +170,10 @@ CREATE INDEX IF NOT EXISTS idx_allowance_types_code ON public.allowance_types(co
 ALTER TABLE public.allowance_types ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Authenticated can view allowance_types" ON public.allowance_types FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "Admins can manage allowance_types" ON public.allowance_types FOR ALL
-  USING (EXISTS (SELECT 1 FROM public.user_profiles up WHERE up.user_id = auth.uid() AND up.email IN ('mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp')));
+-- 管理者ポリシーは migrations/003 で追加
 
 
--- ========== H. school_calendar (オプション・アプリで参照あり) ==========
+-- ========== G. school_calendar (オプション・アプリで参照あり) ==========
 
 CREATE TABLE IF NOT EXISTS public.school_calendar (
   id BIGSERIAL PRIMARY KEY,
@@ -229,7 +189,7 @@ ALTER TABLE public.school_calendar ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Authenticated can view school_calendar" ON public.school_calendar FOR SELECT USING (auth.role() = 'authenticated');
 
 
--- ========== I. updated_at 共通トリガー ==========
+-- ========== H. updated_at 共通トリガー ==========
 
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
@@ -241,12 +201,6 @@ CREATE TRIGGER update_allowances_updated_at BEFORE UPDATE ON public.allowances F
 DROP TRIGGER IF EXISTS update_monthly_applications_updated_at ON public.monthly_applications;
 CREATE TRIGGER update_monthly_applications_updated_at BEFORE UPDATE ON public.monthly_applications FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE OR REPLACE FUNCTION update_inquiries_updated_at() RETURNS TRIGGER AS $$
-BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
-$$ LANGUAGE plpgsql;
-DROP TRIGGER IF EXISTS update_inquiries_updated_at_trigger ON public.inquiries;
-CREATE TRIGGER update_inquiries_updated_at_trigger BEFORE UPDATE ON public.inquiries FOR EACH ROW EXECUTE FUNCTION update_inquiries_updated_at();
-
 DROP TRIGGER IF EXISTS update_annual_schedules_updated_at_trigger ON public.annual_schedules;
 CREATE TRIGGER update_annual_schedules_updated_at_trigger BEFORE UPDATE ON public.annual_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -254,7 +208,7 @@ DROP TRIGGER IF EXISTS update_allowance_types_updated_at ON public.allowance_typ
 CREATE TRIGGER update_allowance_types_updated_at BEFORE UPDATE ON public.allowance_types FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 
--- ========== J. 既存 auth.users の user_profiles 補完 ==========
+-- ========== I. 既存 auth.users の user_profiles 補完 ==========
 
 INSERT INTO public.user_profiles (user_id, email, display_name, avatar_url)
 SELECT u.id, u.email, COALESCE(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)), u.raw_user_meta_data->>'avatar_url'
@@ -264,4 +218,5 @@ ON CONFLICT (user_id) DO NOTHING;
 
 
 -- ========== 完了 ==========
--- Storage バケット "documents" は Dashboard から手動作成し、必要に応じてポリシーを設定してください。
+-- 続けて migrations/ 内の SQL を順番に実行してください（docs/SETUP.md 参照）。
+-- Storage バケット "documents" は Dashboard から手動作成してください。

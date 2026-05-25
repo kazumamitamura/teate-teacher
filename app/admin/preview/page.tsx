@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 
 /** 結合された user_profiles（JOIN で取得する場合）。主キーは user_id、氏名は display_name。 */
 type UserProfileJoined = {
@@ -33,9 +33,8 @@ type UserProfile = {
 
 export default function AllowancePreviewPage() {
   const router = useRouter()
-  const supabase = createClient()
-  
-  const [isAuthorized, setIsAuthorized] = useState(false)
+  const { loading: authLoading, authorized, supabase } = useRequireAdmin()
+
   const [loading, setLoading] = useState(true)
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
@@ -44,35 +43,19 @@ export default function AllowancePreviewPage() {
   const [users, setUsers] = useState<UserProfile[]>([])
   const [viewMode, setViewMode] = useState<'user' | 'date'>('user') // ユーザー別 or 日付別
   
-  const ADMIN_EMAILS = ['mitamuraka@haguroko.ed.jp', 'tomonoem@haguroko.ed.jp']
-
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('ログインが必要です')
-        router.push('/login')
-        return
-      }
-
-      if (!ADMIN_EMAILS.includes(user.email?.toLowerCase() || '')) {
-        alert('管理者権限がありません')
-        router.push('/')
-        return
-      }
-
-      setIsAuthorized(true)
-      await fetchUsers()
-      await fetchData()
-    }
-    checkAuth()
-  }, [])
-
-  useEffect(() => {
-    if (isAuthorized) {
+    if (authorized) {
+      fetchUsers()
       fetchData()
     }
-  }, [selectedYear, selectedMonth, selectedUser, isAuthorized])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorized])
+
+  useEffect(() => {
+    if (authorized) {
+      fetchData()
+    }
+  }, [selectedYear, selectedMonth, selectedUser, authorized])
 
   const fetchUsers = async () => {
     const { data } = await supabase
@@ -384,7 +367,7 @@ export default function AllowancePreviewPage() {
     )
   }
 
-  if (!isAuthorized) {
+  if (authLoading || !authorized) {
     return <div className="min-h-screen flex items-center justify-center">認証中...</div>
   }
 

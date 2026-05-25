@@ -48,3 +48,9 @@ export async function fetchCurrentProfile(
   }
   return (data as UserProfile | null) ?? null
 }
+
+/** 表示用: ロールの日本語ラベル（複数ロールは不要なので1つ） */
+export function getRoleLabel(role?: UserRole | string | null): string {
+  if (role && role in ROLE_LABELS) return ROLE_LABELS[role as UserRole]
+  return ROLE_LABELS.user
+}

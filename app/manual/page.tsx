@@ -301,7 +301,7 @@ export default function ManualPage() {
           <ManualSection searchQuery={searchQuery} searchText="氏名登録 規約閲覧 管理者 事務担当者 氏名 変更">
           <h3 className="text-lg font-bold text-gray-900 mt-8">7. その他の機能</h3>
           <h4 className="text-base font-semibold text-gray-800 mt-4">7.1 氏名の登録・変更</h4>
-          <p className="text-gray-700">氏名はトップ画面の<strong>「👤 アカウント」</strong>（または氏名表示）をクリックすると、氏名の変更・登録画面を開けます。入力して保存すると、帳票などに使う表示名が登録・更新されます。</p>
+          <p className="text-gray-700">氏名はトップ画面の<strong>「👤 アカウント」</strong>をクリックすると変更・登録できます。帳票などに使う表示名として保存されます。</p>
           <h4 className="text-base font-semibold text-gray-800 mt-4">7.2 規約閲覧</h4>
           <p className="text-gray-700"><strong>「規約閲覧」</strong>をクリックすると、手当に関する規約を確認できるページに移動します。</p>
           <h4 className="text-base font-semibold text-gray-800 mt-4">7.3 事務担当者（管理者）向けページ</h4>

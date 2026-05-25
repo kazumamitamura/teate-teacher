@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-import { isAdmin as checkIsAdmin } from '@/utils/adminRoles'
 import Link from 'next/link'
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 import { uploadDocument } from './actions'
 
 type Document = {
@@ -19,8 +18,7 @@ type Document = {
 
 export default function DocumentsAdminPage() {
   const router = useRouter()
-  const supabase = createClient()
-  const [isAuthorized, setIsAuthorized] = useState(false)
+  const { profile, loading: authLoading, authorized, supabase } = useRequireAdmin()
   const [loading, setLoading] = useState(true)
   const [documents, setDocuments] = useState<Document[]>([])
   const [uploading, setUploading] = useState(false)
@@ -29,26 +27,12 @@ export default function DocumentsAdminPage() {
   const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('ログインが必要です')
-        router.push('/login')
-        return
-      }
-
-      if (!checkIsAdmin(user.email || '')) {
-        alert('管理者権限がありません')
-        router.push('/')
-        return
-      }
-
-      setUserEmail(user.email || '')
-      setIsAuthorized(true)
+    if (authorized && profile) {
+      setUserEmail(profile.email)
       fetchDocuments()
     }
-    checkAuth()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorized, profile])
 
   const fetchDocuments = async () => {
     setLoading(true)
@@ -226,7 +210,7 @@ export default function DocumentsAdminPage() {
     })
   }
 
-  if (!isAuthorized) return <div className="p-10 text-center">確認中...</div>
+  if (authLoading || !authorized) return <div className="p-10 text-center">確認中...</div>
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">

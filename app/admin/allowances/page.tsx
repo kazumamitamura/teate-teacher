@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-import { checkAccess, canManageAllowances } from '@/utils/adminRoles'
+import { useRequireAdmin } from '@/utils/useRequireAdmin'
 import { handleSupabaseError, logSupabaseError } from '@/utils/supabase/errorHandler'
 import * as XLSX from 'xlsx'
 
@@ -26,9 +25,8 @@ type AllowanceRow = {
 
 export default function AllowanceManagementPage() {
   const router = useRouter()
-  const supabase = createClient()
-  
-  const [isAuthorized, setIsAuthorized] = useState(false)
+  const { profile, loading: authLoading, authorized, supabase } = useRequireAdmin()
+
   const [loading, setLoading] = useState(true)
   const [userEmail, setUserEmail] = useState('')
   
@@ -46,36 +44,12 @@ export default function AllowanceManagementPage() {
   const [allowanceSettings, setAllowanceSettings] = useState<any[]>([])
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          alert('ログインが必要です')
-          router.push('/login')
-          setLoading(false)
-          return
-        }
-
-        const hasAccess = checkAccess(user.email || '', canManageAllowances)
-        if (!hasAccess) {
-          alert('手当管理の権限がありません')
-          router.push('/admin')
-          setLoading(false)
-          return
-        }
-
-        setUserEmail(user.email || '')
-        setIsAuthorized(true)
-        await fetchUsers()
-      } catch (error) {
-        console.error('認証チェックエラー:', error)
-        alert('認証チェックに失敗しました')
-      } finally {
-        setLoading(false)
-      }
+    if (authorized && profile) {
+      setUserEmail(profile.email)
+      fetchUsers().finally(() => setLoading(false))
     }
-    checkAuth()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorized, profile])
 
   const fetchUsers = async () => {
     try {
@@ -418,7 +392,7 @@ export default function AllowanceManagementPage() {
     }
   }
 
-  if (!isAuthorized) return <div className="p-10 text-center">確認中...</div>
+  if (authLoading || !authorized) return <div className="p-10 text-center">確認中...</div>
 
   return (
     <div className="min-h-screen bg-slate-50">
