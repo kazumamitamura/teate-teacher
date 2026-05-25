@@ -16,16 +16,12 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
   user_id      UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
   email        TEXT NOT NULL,
   display_name TEXT NOT NULL DEFAULT '',
-  last_name    TEXT,
-  first_name   TEXT,
   role         TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin','super_admin')),
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 2) 既存テーブルにカラムが無ければ追加（冪等）
-ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS last_name  TEXT;
-ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS first_name TEXT;
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 ALTER TABLE public.user_profiles ALTER COLUMN user_id DROP NOT NULL;
 

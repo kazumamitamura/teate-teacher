@@ -161,7 +161,7 @@ export default function ManualPage() {
           <hr className="border-slate-200 my-8" />
 
           {/* 3. トップ画面 */}
-          <ManualSection searchQuery={searchQuery} searchText="トップ カレンダー 月 支給予定額 合宿 遠征 期限 手当申請 氏名 規約 お問い合わせ ログアウト 複数日 日付 休日 勤務日 履歴 ゴミ箱">
+          <ManualSection searchQuery={searchQuery} searchText="トップ カレンダー 月 支給予定額 合宿 遠征 期限 手当申請 氏名 規約 ログアウト 複数日 日付 休日 勤務日 履歴 ゴミ箱">
           <h3 className="text-lg font-bold text-gray-900 mt-8">3. トップ画面（カレンダー）の見方</h3>
           <p className="text-gray-700">ログイン後、最初に表示されるのが「トップ画面」です。</p>
           <ManualImage fig={2} />
@@ -180,7 +180,6 @@ export default function ManualPage() {
                 <tr><td className="border border-slate-200 px-3 py-2">合宿：○日 / 遠征：○日</td><td className="border border-slate-200 px-3 py-2">その月の合宿・遠征の日数</td></tr>
                 <tr><td className="border border-slate-200 px-3 py-2">👤 アカウント</td><td className="border border-slate-200 px-3 py-2">氏名の登録・変更（新規登録時に入力した氏名は自動で登録されます）</td></tr>
                 <tr><td className="border border-slate-200 px-3 py-2">規約閲覧</td><td className="border border-slate-200 px-3 py-2">手当規約のページへ移動</td></tr>
-                <tr><td className="border border-slate-200 px-3 py-2">お問い合わせ</td><td className="border border-slate-200 px-3 py-2">問い合わせページへ移動</td></tr>
                 <tr><td className="border border-slate-200 px-3 py-2">ログアウト</td><td className="border border-slate-200 px-3 py-2">ログアウトする</td></tr>
                 <tr><td className="border border-slate-200 px-3 py-2">📅 複数日まとめて入力</td><td className="border border-slate-200 px-3 py-2">複数日をまとめて同じ内容で入力するモード（後述）</td></tr>
               </tbody>
@@ -299,31 +298,13 @@ export default function ManualPage() {
           <hr className="border-slate-200 my-8" />
 
           {/* 7. その他の機能 */}
-          <ManualSection searchQuery={searchQuery} searchText="氏名登録 規約閲覧 お問い合わせ 管理者 事務担当者 氏名 変更 件名 メッセージ 送信">
+          <ManualSection searchQuery={searchQuery} searchText="氏名登録 規約閲覧 管理者 事務担当者 氏名 変更">
           <h3 className="text-lg font-bold text-gray-900 mt-8">7. その他の機能</h3>
           <h4 className="text-base font-semibold text-gray-800 mt-4">7.1 氏名の登録・変更</h4>
-          <p className="text-gray-700">氏名は<strong>新規登録時</strong>に入力すると自動で登録されます。登録後はトップ画面の<strong>「👤 アカウント」</strong>（または氏名表示）をクリックすると、氏名の変更・登録画面を開けます。姓と名を入力して保存すると、帳票などに使う表示名が登録・更新されます。</p>
+          <p className="text-gray-700">氏名はトップ画面の<strong>「👤 アカウント」</strong>（または氏名表示）をクリックすると、氏名の変更・登録画面を開けます。入力して保存すると、帳票などに使う表示名が登録・更新されます。</p>
           <h4 className="text-base font-semibold text-gray-800 mt-4">7.2 規約閲覧</h4>
           <p className="text-gray-700"><strong>「規約閲覧」</strong>をクリックすると、手当に関する規約を確認できるページに移動します。</p>
-          <h4 className="text-base font-semibold text-gray-800 mt-4">7.3 お問い合わせ（問い合わせ方法）</h4>
-          <p className="text-gray-700">システムの不具合や操作方法の質問などを、管理者に送信できます。</p>
-          <p className="text-gray-700 font-medium mt-2">開き方</p>
-          <p className="text-gray-700 text-sm">ログインした状態で、トップ画面の<strong>「お問い合わせ」</strong>をクリックすると、お問い合わせページに移動します。</p>
-          <p className="text-gray-700 font-medium mt-3">入力項目</p>
-          <ul className="list-disc pl-6 text-gray-700 space-y-1 text-sm">
-            <li><strong>件名</strong>（必須）…例：「手当の入力方法について」</li>
-            <li><strong>メッセージ</strong>（必須）…質問や報告内容を詳しく記入してください</li>
-          </ul>
-          <p className="text-gray-700 text-sm mt-2">送信者情報（氏名・メールアドレス）は、ログイン中のアカウントから自動で付きます。回答は登録されているメールアドレスに送られます。</p>
-          <p className="text-gray-700 font-medium mt-3">送信の流れ</p>
-          <ol className="list-decimal pl-6 text-gray-700 space-y-1 text-sm">
-            <li>件名とメッセージを入力する</li>
-            <li><strong>「📧 お問い合わせを送信」</strong>ボタンをクリックする</li>
-            <li>「お問い合わせを送信しました」と表示されれば完了。通常、1〜2営業日以内にメールで回答があります</li>
-            <li>数秒後に自動でメイン画面に戻ります（または「メイン画面に戻る」をクリック）</li>
-          </ol>
-          <p className="text-gray-700 text-sm mt-2">💡 エラーメッセージが出る場合は、その内容も件名やメッセージに含めると対応しやすくなります。</p>
-          <h4 className="text-base font-semibold text-gray-800 mt-4">7.4 事務担当者（管理者）向けページ</h4>
+          <h4 className="text-base font-semibold text-gray-800 mt-4">7.3 事務担当者（管理者）向けページ</h4>
           <p className="text-gray-700">管理者用メールアドレスでログインしている場合、画面上部に<strong>「事務担当者ページへ」</strong>のリンクが表示されます。クリックすると、Excel出力・設定などの管理機能があるページに移動します。（一般ユーザー向けマニュアルでは、詳細は「管理者マニュアル」に任せてよいです）</p>
           </ManualSection>
 

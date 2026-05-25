@@ -333,7 +333,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* 追加メニュー */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* ユーザー管理（新規） */}
           <button
             onClick={() => router.push('/admin/users')}
@@ -375,24 +375,6 @@ export default function AdminDashboard() {
             </div>
           </button>
 
-          {/* お問い合わせ管理 */}
-          <button 
-            onClick={() => router.push('/admin/inquiries')}
-            className="bg-gradient-to-br from-orange-500 to-orange-600 p-8 rounded-3xl shadow-xl hover:shadow-2xl transition-all text-left group transform hover:scale-105"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="text-5xl">📧</div>
-            </div>
-            <h3 className="text-2xl font-extrabold text-white mb-2">
-              お問い合わせ管理
-            </h3>
-            <p className="text-orange-100 text-xs mb-3">
-              ユーザーからの問い合わせを確認・管理
-            </p>
-            <div className="text-xs text-orange-200 bg-orange-700/30 px-2 py-1 rounded-lg inline-block">
-              管理者専用
-            </div>
-          </button>
         </div>
 
         {/* 年間勤務表CSVアップロード */}

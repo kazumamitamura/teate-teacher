@@ -23,15 +23,34 @@ const ROLE_BADGE: Record<UserRole, string> = {
 }
 
 interface CsvRow {
-  lastName: string
-  firstName: string
+  displayName: string
   email: string
+  role: UserRole
 }
 
 interface BulkResult {
   inserted: number
   updated: number
   errors: { row: number; email: string; reason: string }[]
+}
+
+const ROLE_ALIASES: Record<string, UserRole> = {
+  user: 'user',
+  入力者: 'user',
+  '一般': 'user',
+  general: 'user',
+  admin: 'admin',
+  管理者: 'admin',
+  super_admin: 'super_admin',
+  superadmin: 'super_admin',
+  super: 'super_admin',
+  スーパー管理者: 'super_admin',
+}
+
+function normalizeRole(raw: string | undefined | null): UserRole {
+  if (!raw) return 'user'
+  const key = raw.trim().toLowerCase()
+  return ROLE_ALIASES[key] ?? ROLE_ALIASES[raw.trim()] ?? 'user'
 }
 
 export default function AdminUsersPage() {
@@ -49,7 +68,7 @@ export default function AdminUsersPage() {
   // 追加 / 編集モーダル
   const [showFormModal, setShowFormModal] = useState(false)
   const [editing, setEditing] = useState<UserProfile | null>(null)
-  const [form, setForm] = useState({ last_name: '', first_name: '', email: '', role: 'user' as UserRole })
+  const [form, setForm] = useState({ display_name: '', email: '', role: 'user' as UserRole })
 
   // CSV
   const csvInputRef = useRef<HTMLInputElement | null>(null)
@@ -102,9 +121,7 @@ export default function AdminUsersPage() {
       ? users.filter(
           (u) =>
             u.display_name.toLowerCase().includes(q) ||
-            u.email.toLowerCase().includes(q) ||
-            (u.last_name ?? '').toLowerCase().includes(q) ||
-            (u.first_name ?? '').toLowerCase().includes(q)
+            u.email.toLowerCase().includes(q)
         )
       : [...users]
 
@@ -147,15 +164,14 @@ export default function AdminUsersPage() {
   // --------------- 個別追加・編集 ---------------
   const openAddModal = () => {
     setEditing(null)
-    setForm({ last_name: '', first_name: '', email: '', role: 'user' })
+    setForm({ display_name: '', email: '', role: 'user' })
     setShowFormModal(true)
   }
 
   const openEditModal = (u: UserProfile) => {
     setEditing(u)
     setForm({
-      last_name: u.last_name ?? '',
-      first_name: u.first_name ?? '',
+      display_name: u.display_name,
       email: u.email,
       role: u.role,
     })
@@ -169,32 +185,27 @@ export default function AdminUsersPage() {
 
   const saveForm = async () => {
     const email = form.email.trim().toLowerCase()
-    const last = form.last_name.trim()
-    const first = form.first_name.trim()
+    const displayName = form.display_name.trim()
     if (!email || !email.includes('@')) {
       alert('メールアドレスを正しく入力してください')
       return
     }
-    if (!last && !first) {
-      alert('姓または名のいずれかを入力してください')
+    if (!displayName) {
+      alert('氏名を入力してください')
       return
     }
 
-    // super_admin は本人以外は変更不可（降格防止 / 昇格は super_admin だけが可）
     if (!isSuperAdminRole(me?.role) && form.role !== 'user') {
       alert('スーパー管理者のみが管理者ロールを付与できます。')
       return
     }
 
-    const displayName = `${last} ${first}`.trim()
     setLoading(true)
     try {
       if (editing) {
         const { error } = await supabase
           .from('user_profiles')
           .update({
-            last_name: last || null,
-            first_name: first || null,
             display_name: displayName,
             email,
             role: form.role,
@@ -203,8 +214,6 @@ export default function AdminUsersPage() {
         if (error) throw error
       } else {
         const { error } = await supabase.from('user_profiles').insert({
-          last_name: last || null,
-          first_name: first || null,
           display_name: displayName,
           email,
           role: form.role,
@@ -274,8 +283,7 @@ export default function AdminUsersPage() {
     const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim())
     if (lines.length === 0) return []
 
-    // ヘッダー行を判定: 含む 'email' 又は '姓' '名'
-    const headerLike = /姓|名|email|メール|last|first/i.test(lines[0])
+    const headerLike = /氏名|name|email|メール|権限|role/i.test(lines[0])
     const dataLines = headerLike ? lines.slice(1) : lines
 
     const splitCsvLine = (line: string): string[] => {
@@ -303,8 +311,12 @@ export default function AdminUsersPage() {
     }
 
     return dataLines.map((line) => {
-      const [last = '', first = '', email = ''] = splitCsvLine(line)
-      return { lastName: last, firstName: first, email: email.toLowerCase() }
+      const [name = '', email = '', role = ''] = splitCsvLine(line)
+      return {
+        displayName: name,
+        email: email.toLowerCase(),
+        role: normalizeRole(role),
+      }
     })
   }
 
@@ -329,6 +341,7 @@ export default function AdminUsersPage() {
       }
 
       const allowedDomain = (process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? '').toLowerCase().trim()
+      const canSetAdminRole = isSuperAdminRole(me?.role)
 
       // 既存メール一覧を取得
       const emailList = rows.map((r) => r.email).filter(Boolean)
@@ -359,18 +372,18 @@ export default function AdminUsersPage() {
           })
           continue
         }
-        const last = r.lastName.trim()
-        const first = r.firstName.trim()
-        const displayName = `${last} ${first}`.trim() || r.email.split('@')[0]
+
+        const displayName = r.displayName.trim() || r.email.split('@')[0]
+        // super_admin 以外は権限を上げられない（CSVに admin と書かれていても無視）
+        const safeRole: UserRole = canSetAdminRole ? r.role : 'user'
 
         const existsId = existingMap.get(r.email)
         if (existsId) {
           const { error } = await supabase
             .from('user_profiles')
             .update({
-              last_name: last || null,
-              first_name: first || null,
               display_name: displayName,
+              ...(canSetAdminRole ? { role: safeRole } : {}),
             })
             .eq('id', existsId)
           if (error) errors.push({ row: i + 2, email: r.email, reason: error.message })
@@ -378,10 +391,8 @@ export default function AdminUsersPage() {
         } else {
           const { error } = await supabase.from('user_profiles').insert({
             email: r.email,
-            last_name: last || null,
-            first_name: first || null,
             display_name: displayName,
-            role: 'user',
+            role: safeRole,
           })
           if (error) errors.push({ row: i + 2, email: r.email, reason: error.message })
           else inserted++
@@ -401,7 +412,11 @@ export default function AdminUsersPage() {
   }
 
   const downloadTemplate = () => {
-    const csv = '\uFEFF姓,名,メール\n三田村,和真,mitamuraka@haguroko.ed.jp\n友野,太郎,tomonoem@haguroko.ed.jp\n'
+    const csv =
+      '\uFEFF氏名,メールアドレス,権限\n' +
+      '三田村 和真,mitamuraka@haguroko.ed.jp,super_admin\n' +
+      '友野 太郎,tomonoem@haguroko.ed.jp,admin\n' +
+      '山田 花子,yamada@haguroko.ed.jp,\n'
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -467,7 +482,7 @@ export default function AdminUsersPage() {
             <div>
               <h2 className="text-lg font-bold flex items-center gap-2">
                 <span>CSV 一括登録</span>
-                <span className="text-xs font-normal text-slate-400">姓 / 名 / メール</span>
+                <span className="text-xs font-normal text-slate-400">氏名 / メールアドレス / 権限</span>
               </h2>
               <p className="mt-1 text-sm text-slate-400">
                 教員を一括で事前登録します。初めて Google ログインした際にアカウントが自動で紐付きます。
@@ -484,10 +499,15 @@ export default function AdminUsersPage() {
           <div className="rounded-xl bg-slate-900/60 border border-white/5 p-4 mb-4">
             <p className="text-xs text-slate-400 mb-2">CSV フォーマット例（UTF-8 推奨 / Shift-JIS も自動判別）</p>
             <pre className="text-xs text-slate-200 font-mono whitespace-pre overflow-x-auto">
-{`姓,名,メール
-三田村,和真,mitamuraka@haguroko.ed.jp
-友野,太郎,tomonoem@haguroko.ed.jp`}
+{`氏名,メールアドレス,権限
+三田村 和真,mitamuraka@haguroko.ed.jp,super_admin
+友野 太郎,tomonoem@haguroko.ed.jp,admin
+山田 花子,yamada@haguroko.ed.jp,`}
             </pre>
+            <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">
+              ・権限は空欄なら <span className="font-mono text-slate-300">user</span>（入力者）として登録されます。<br />
+              ・<span className="font-mono text-slate-300">admin</span> / <span className="font-mono text-slate-300">super_admin</span> はスーパー管理者がアップロードした場合のみ反映されます。
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -613,11 +633,6 @@ export default function AdminUsersPage() {
                             </span>
                           )}
                         </div>
-                        {(u.last_name || u.first_name) && (
-                          <div className="text-xs text-slate-500">
-                            {u.last_name ?? ''} / {u.first_name ?? ''}
-                          </div>
-                        )}
                       </td>
                       <td className="px-4 py-3 text-slate-300 break-all">{u.email}</td>
                       <td className="px-4 py-3">
@@ -676,31 +691,20 @@ export default function AdminUsersPage() {
             </h3>
             <p className="text-xs text-slate-400 mb-5">
               {editing
-                ? '氏名やメール、ロールを更新します。'
+                ? '氏名・メールアドレス・権限を更新します。'
                 : '事前登録します。初回 Google ログイン時に紐付きます。'}
             </p>
 
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <FormField label="姓">
-                  <input
-                    type="text"
-                    value={form.last_name}
-                    onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                    placeholder="例: 三田村"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-slate-100 focus:border-indigo-400 focus:outline-none"
-                  />
-                </FormField>
-                <FormField label="名">
-                  <input
-                    type="text"
-                    value={form.first_name}
-                    onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                    placeholder="例: 和真"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-slate-100 focus:border-indigo-400 focus:outline-none"
-                  />
-                </FormField>
-              </div>
+              <FormField label="氏名">
+                <input
+                  type="text"
+                  value={form.display_name}
+                  onChange={(e) => setForm({ ...form, display_name: e.target.value })}
+                  placeholder="例: 三田村 和真"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-slate-100 focus:border-indigo-400 focus:outline-none"
+                />
+              </FormField>
 
               <FormField label="メールアドレス">
                 <input
@@ -716,7 +720,7 @@ export default function AdminUsersPage() {
                 <select
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
-                  disabled={!canManageRoles || (editing?.id === me?.id)}
+                  disabled={!canManageRoles || editing?.id === me?.id}
                   className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-slate-100 focus:border-indigo-400 focus:outline-none disabled:opacity-50"
                 >
                   <option value="user">入力者 (user)</option>
