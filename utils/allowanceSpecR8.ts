@@ -141,8 +141,10 @@ const R8_META_PREFIX = '__r8__:'
 
 export function isWorkDayFromDayType(dayType: string): boolean {
   if (!dayType?.trim() || dayType === '---') return false
-  if (dayType.includes('(仮)')) return false
-  return !dayType.includes('休日') && (dayType.includes('勤務日') || dayType.includes('授業'))
+  // 休日を最優先で判定（「休日(仮)」も含む）
+  if (dayType.includes('休日')) return false
+  // 「勤務日」「勤務日(仮)」「授業日」はすべて勤務日扱い
+  return dayType.includes('勤務日') || dayType.includes('授業')
 }
 
 export function getRegionLabel(regionId: string): string {
