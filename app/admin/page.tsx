@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getRoleLabel } from '@/utils/userProfile'
 import { useRequireAdmin } from '@/utils/useRequireAdmin'
+import { downloadAnnualScheduleCsvTemplate } from '@/utils/csvTemplates'
 import { logout } from '../auth/actions'
 
 export default function AdminDashboard() {
@@ -317,10 +318,20 @@ export default function AdminDashboard() {
 
         {/* 年間勤務表CSVアップロード */}
         <div className="bg-white p-6 rounded-2xl shadow-md mb-8">
-          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <span className="text-2xl">📅</span>
-            年間勤務表CSV登録
-          </h3>
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className="text-2xl">📅</span>
+              年間勤務表CSV登録
+            </h3>
+            <button
+              type="button"
+              onClick={downloadAnnualScheduleCsvTemplate}
+              className="px-4 py-2 rounded-lg text-sm font-bold bg-slate-100 text-slate-800 border border-slate-300 hover:bg-slate-200 transition flex items-center gap-2 shrink-0"
+            >
+              <span aria-hidden>📥</span>
+              フォーマットCSVをダウンロード
+            </button>
+          </div>
           <p className="text-sm text-gray-700 mb-4">
             CSVファイルをアップロードして、年間の勤務区分（A/B/休/祝など）を一括登録できます。<br/>
             ユーザー画面のカレンダーに勤務区分が表示されます。
@@ -335,6 +346,10 @@ export default function AdminDashboard() {
 2025-04-29,祝,昭和の日
 2025-05-03,休,憲法記念日
             </pre>
+            <p className="mt-2 text-xs text-gray-600">
+              ※ 日付は <span className="font-mono">YYYY-MM-DD</span> または{' '}
+              <span className="font-mono">YYYY/MM/DD</span>。1行目はヘッダー行のままにしてください。行事名は空欄でも構いません。
+            </p>
           </div>
 
           <div className="flex gap-4 items-end">

@@ -10,6 +10,7 @@ import {
   type UserRole,
 } from '@/utils/userProfile'
 import { useRequireAdmin } from '@/utils/useRequireAdmin'
+import { downloadTeachersCsvTemplate } from '@/utils/csvTemplates'
 import { logout } from '@/app/auth/actions'
 
 type SortKey = 'display_name' | 'email' | 'role' | 'linked'
@@ -389,20 +390,6 @@ export default function AdminUsersPage() {
     }
   }
 
-  const downloadTemplate = () => {
-    const csv =
-      '\uFEFF氏名,メールアドレス,権限\n' +
-      '三田村 和真,mitamuraka@haguroko.ed.jp,super_admin\n' +
-      '友野 太郎,tomonoem@haguroko.ed.jp,admin\n' +
-      '山田 花子,yamada@haguroko.ed.jp,\n'
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'teachers_template.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
 
   const handleLogout = async () => {
     await logout()
@@ -467,10 +454,12 @@ export default function AdminUsersPage() {
               </p>
             </div>
             <button
-              onClick={downloadTemplate}
-              className="px-4 py-2 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 hover:bg-white/10 transition"
+              type="button"
+              onClick={downloadTeachersCsvTemplate}
+              className="px-4 py-2 rounded-lg text-sm font-semibold bg-white/5 border border-white/10 hover:bg-white/10 transition flex items-center gap-2"
             >
-              テンプレートをDL
+              <span aria-hidden>📥</span>
+              フォーマットCSVをダウンロード
             </button>
           </div>
 
