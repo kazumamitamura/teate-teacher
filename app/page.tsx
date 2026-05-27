@@ -6,7 +6,15 @@ import { handleSupabaseError, logSupabaseError } from '@/utils/supabase/errorHan
 import { useRouter } from 'next/navigation'
 import Calendar from 'react-calendar'
 import 'react-calendar/dist/Calendar.css'
-import { ACTIVITY_TYPES, DESTINATIONS, calculateAmount, calculateAmountFromMaster, canSelectActivity } from '@/utils/allowanceRules'
+import { AllowanceInputForm } from '@/components/allowance/AllowanceInputForm'
+import {
+  EMPTY_ALLOWANCE_INPUT,
+  calculateR8Total,
+  parseStoredAllowance,
+  serializeForSave,
+  validateAllowanceInput,
+  type AllowanceInputState,
+} from '@/utils/allowanceSpecR8'
 import { fetchCurrentProfile, isAdminRole } from '@/utils/userProfile'
 import { logout } from './auth/actions'
 
@@ -146,16 +154,8 @@ export default function Home() {
   const [showInputModal, setShowInputModal] = useState(false)
   const [inputDisplayName, setInputDisplayName] = useState('')
 
-  const [activityId, setActivityId] = useState('')
-  const [destinationId, setDestinationId] = useState('inside_short')
-  const [destinationDetail, setDestinationDetail] = useState('') // 目的地（運転時）
-  const [competitionName, setCompetitionName] = useState('') // 大会名（指定大会時）
-  const [isDriving, setIsDriving] = useState(false)
-  const [isAccommodation, setIsAccommodation] = useState(false)
-  const [isLongBreak, setIsLongBreak] = useState(false)
+  const [allowanceInput, setAllowanceInput] = useState<AllowanceInputState>(EMPTY_ALLOWANCE_INPUT)
   const [calculatedAmount, setCalculatedAmount] = useState(0)
-  const [customAmount, setCustomAmount] = useState(0)
-  const [customDescription, setCustomDescription] = useState('')
 
   // 月次申請ステータス
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatus>('DRAFT')
@@ -393,7 +393,10 @@ export default function Home() {
     }
     setSubmittingStatus(true)
     try {
-      if (activityId) {
+      const hasFormInput =
+        allowanceInput.businessType ||
+        (allowanceInput.accommodationEnabled && allowanceInput.accommodationType)
+      if (hasFormInput) {
         const saved = await performSave({ closeModal: false, silent: true })
         if (!saved) return
       }
@@ -409,7 +412,7 @@ export default function Home() {
       }
       const ok = await submitMonth({
         skipConfirm: true,
-        successMessage: activityId
+        successMessage: hasFormInput
           ? '保存し、申請しました。管理者の承認をお待ちください。'
           : '申請しました。管理者の承認をお待ちください。',
       })
@@ -619,101 +622,17 @@ export default function Home() {
 
       const allowance = allowances.find(a => a.date === dateStr)
       if (allowance) {
-        setActivityId(allowance.activity_type === allowance.activity_type ? (ACTIVITY_TYPES.find(t => t.label === allowance.activity_type)?.id || allowance.activity_type) : '')
-        
-        // 古いIDを新しいIDにマッピング（後方互換性）
-        let mappedDestinationId = DESTINATIONS.find(d => d.label === (allowance.destination_type || ''))?.id || 'inside_short'
-        const idMapping: Record<string, string> = {
-          'kannai': 'inside_short',
-          'kennai_short': 'inside_short',
-          'kennai_long': 'inside_long',
-          'kengai': 'outside'
-        }
-        if (idMapping[mappedDestinationId]) {
-          mappedDestinationId = idMapping[mappedDestinationId]
-        }
-        
-        setDestinationId(mappedDestinationId)
-        
-        // 指定大会の場合は大会名として扱う
-        if (allowance.activity_type.includes('C:') || allowance.activity_type.includes('指定大会')) {
-          const detail = allowance.destination_detail || ''
-          // 「大会名（目的地）」の形式で保存されている場合は分離
-          const match = detail.match(/^(.+?)（(.+?)）$/)
-          if (match && allowance.is_driving) {
-            setCompetitionName(match[1]) // 大会名
-            setDestinationDetail(match[2]) // 目的地
-          } else {
-            setCompetitionName(detail) // 大会名のみ
-            setDestinationDetail('') // 目的地はクリア
-          }
-        } else {
-        setDestinationDetail(allowance.destination_detail || '')
-          setCompetitionName('') // 大会名はクリア
-        }
-        
-        setIsDriving(allowance.is_driving || false)
-        setIsAccommodation(allowance.is_accommodation || false)
-        // custom_amount と custom_description は、カラムが存在する場合のみ使用
-        setCustomAmount(allowance.custom_amount || 0)
-        setCustomDescription(allowance.custom_description || '')
+        setAllowanceInput(parseStoredAllowance(allowance))
       } else {
-        setActivityId('')
-        setDestinationId('inside_short')
-        setDestinationDetail('')
-        setCompetitionName('')
-        setIsDriving(false)
-        setIsAccommodation(false)
-        setCustomAmount(0)
-        setCustomDescription('')
+        setAllowanceInput(EMPTY_ALLOWANCE_INPUT)
       }
     }
     updateDayInfo()
   }, [selectedDate, allowances, schoolCalendar, annualSchedules])
 
   useEffect(() => {
-    console.log('=== 支給予定額の計算開始 ===')
-    console.log('activityId:', activityId)
-    console.log('dayType:', dayType)
-    console.log('isDriving:', isDriving)
-    console.log('destinationId:', destinationId)
-    console.log('isAccommodation:', isAccommodation)
-    console.log('isLongBreak:', isLongBreak)
-    console.log('allowanceTypes件数:', allowanceTypes.length)
-    
-    // 休日判定: dayTypeに'休日'が含まれる場合は休日、それ以外は勤務日
-    const isWorkDay = !dayType.includes('休日') && (dayType.includes('勤務日') || dayType.includes('授業'))
-    // 休日・勤務日の指定がない日（(仮)付きや未設定）は全手当項目を選択可能にする
-    const dayTypeUnspecified = dayType.includes('(仮)') || !dayType?.trim() || dayType === '---'
-    console.log('勤務日判定:', isWorkDay, '指定なし:', dayTypeUnspecified)
-    
-    if (!activityId) { 
-      console.log('activityIdが未選択のため、0円')
-      setCalculatedAmount(0)
-      return 
-    }
-    
-    const validation = canSelectActivity(activityId, isWorkDay, dayTypeUnspecified)
-    if (!validation.allowed) {
-      console.warn('選択制限:', validation.message)
-    }
-    
-    // 手入力その他（CUSTOM）の場合は、カスタム金額を使用
-    if (activityId === 'CUSTOM') {
-      console.log('手入力その他:', customAmount, '円')
-      setCalculatedAmount(customAmount)
-      return
-    }
-    
-    const isHalfDay = false
-    const amt = allowanceTypes.length > 0 
-      ? calculateAmountFromMaster(activityId, isDriving, destinationId, isWorkDay, isAccommodation, isHalfDay, allowanceTypes, isLongBreak)
-      : calculateAmount(activityId, isDriving, destinationId, isWorkDay, isAccommodation, isHalfDay, isLongBreak)
-    
-    console.log('計算結果:', amt, '円')
-    console.log('=== 支給予定額の計算終了 ===')
-    setCalculatedAmount(amt)
-  }, [activityId, isDriving, destinationId, dayType, isAccommodation, isLongBreak, allowanceTypes, customAmount])
+    setCalculatedAmount(calculateR8Total(allowanceInput, dayType))
+  }, [allowanceInput, dayType])
 
   const performSave = async (opts?: { closeModal?: boolean; silent?: boolean }): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -732,46 +651,32 @@ export default function Home() {
       dates: targetDates.map(d => formatDate(d))
     })
 
-    if (activityId) {
-      // カスタム（手入力その他）の場合、バリデーション
-      if (activityId === 'CUSTOM') {
-        if (!customDescription || customAmount <= 0) {
-          alert('手入力その他を選択した場合、内容と金額を必ず入力してください。')
-          return false
-        }
+    const hasEntry =
+      allowanceInput.businessType ||
+      (allowanceInput.accommodationEnabled && allowanceInput.accommodationType)
+
+    if (hasEntry) {
+      const validation = validateAllowanceInput(allowanceInput, dayType)
+      if (!validation.ok) {
+        alert(validation.message)
+        return false
       }
-      
-      // 各日付に対してデータを保存
+
+      const payload = serializeForSave(allowanceInput, dayType)
+
       for (const date of targetDates) {
         const dateStr = formatDate(date)
-        
-        // destination_detailの決定
-        let detailValue = ''
-        if (activityId === 'CUSTOM') {
-          detailValue = customDescription
-        } else if (activityId === 'C') {
-          // 指定大会の場合：大会名と目的地を結合
-          if (isDriving && destinationDetail) {
-            detailValue = `${competitionName}（${destinationDetail}）`
-          } else {
-            detailValue = competitionName
-          }
-        } else {
-          detailValue = destinationDetail
-        }
-        
-        // 新規データを挿入
-        const insertData: any = { 
-          user_id: user.id, 
-          user_email: user.email, 
-          date: dateStr, 
-          activity_type: ACTIVITY_TYPES.find(a => a.id === activityId)?.label || activityId, 
-          destination_type: DESTINATIONS.find(d => d.id === destinationId)?.label, 
-          destination_detail: detailValue, 
-          is_driving: isDriving, 
-          is_accommodation: isAccommodation,
-          is_long_break: isLongBreak,
-          amount: calculatedAmount
+
+        const insertData: Record<string, unknown> = {
+          user_id: user.id,
+          user_email: user.email,
+          date: dateStr,
+          activity_type: payload.activity_type,
+          destination_type: payload.destination_type,
+          destination_detail: payload.destination_detail,
+          is_driving: payload.is_driving,
+          is_accommodation: payload.is_accommodation,
+          amount: payload.amount,
         }
         
         console.log('挿入データ:', dateStr, insertData)
@@ -1345,325 +1250,48 @@ export default function Home() {
 
             {/* モーダルコンテンツ */}
             <div className="p-4 sm:p-6">
-              <form onSubmit={handleSave} className={`flex flex-col gap-4 sm:gap-4 ${isAllowLocked ? 'opacity-60 pointer-events-none' : ''}`}>
-            
-            {/* 手当エリア */}
-                <div>
-                <div>
-                <label className="block text-sm sm:text-base font-bold text-black mb-2">部活動 業務内容 {isAllowLocked && '(編集不可)'}</label>
-                <select 
-                    disabled={isAllowLocked} 
-                    value={activityId} 
-                    onChange={(e) => {
-                        const newActivityId = e.target.value
-                        const isWorkDay = !dayType.includes('休日') && (dayType.includes('勤務日') || dayType.includes('授業'))
-                        const dayTypeUnspecified = dayType.includes('(仮)') || !dayType?.trim() || dayType === '---'
-                        const validation = canSelectActivity(newActivityId, isWorkDay, dayTypeUnspecified)
-                        if (!validation.allowed) {
-                            alert(validation.message)
-                            return
-                        }
-                        setActivityId(newActivityId)
-                        setDestinationId('inside_short')
-                    }} 
-                    className="w-full bg-slate-50 p-3 sm:p-3 rounded-lg border-2 border-slate-300 font-bold text-black text-base appearance-none touch-manipulation"
-                    style={{ fontSize: '16px' }}
-                >
-                    <option value="">なし (部活なし)</option>
-                    {ACTIVITY_TYPES.map(type => {
-                        const isWorkDay = !dayType.includes('休日') && (dayType.includes('勤務日') || dayType.includes('授業'))
-                        const dayTypeUnspecified = dayType.includes('(仮)') || !dayType?.trim() || dayType === '---'
-                        const validation = canSelectActivity(type.id, isWorkDay, dayTypeUnspecified)
-                        return (
-                            <option 
-                                key={type.id} 
-                                value={type.id}
-                                disabled={!validation.allowed}
-                            >
-                                {type.label} {!validation.allowed ? '(勤務日不可)' : ''}
-                            </option>
-                        )
-                    })}
-                </select>
-                {activityId && (() => {
-                    const isWorkDay = !dayType.includes('休日') && (dayType.includes('勤務日') || dayType.includes('授業'))
-                    const dayTypeUnspecified = dayType.includes('(仮)') || !dayType?.trim() || dayType === '---'
-                    const validation = canSelectActivity(activityId, isWorkDay, dayTypeUnspecified)
-                    if (!validation.allowed) {
-                        return <div className="text-xs text-red-600 mt-1 font-bold">⚠️ {validation.message}</div>
-                    }
-                    return null
-                })()}
-                </div>
-                {activityId && (
-                <>
-                    {/* 災害業務選択時 */}
-                    {activityId === 'DISASTER' ? (
-                        <div className="mt-2">
-                            <label className="block text-xs font-bold text-orange-600 mb-1">災害業務の内容（必須）</label>
-                            <input 
-                                disabled={isAllowLocked} 
-                                type="text" 
-                                placeholder="例: 台風による緊急待機" 
-                                value={destinationDetail} 
-                                onChange={(e) => setDestinationDetail(e.target.value)} 
-                                className="w-full bg-white p-3 rounded-lg border border-orange-200 text-xs text-black font-bold" 
-                                required
-                            />
-                            <div className="text-xs text-orange-500 mt-1">※災害業務の内容を具体的に記入してください。</div>
-                        </div>
-                    ) : activityId === 'CUSTOM' ? (
-                        /* 手入力その他選択時 */
-                        <div className="mt-2 space-y-2">
-                            <div>
-                                <label className="block text-xs font-bold text-purple-600 mb-1">業務内容（必須）</label>
-                                <input 
-                                    disabled={isAllowLocked} 
-                                    type="text" 
-                                    placeholder="例: 特別講習会の引率" 
-                                    value={customDescription} 
-                                    onChange={(e) => setCustomDescription(e.target.value)} 
-                                    className="w-full bg-white p-3 rounded-lg border border-purple-200 text-xs text-black font-bold" 
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-purple-600 mb-1">金額（必須）</label>
-                                <input 
-                                    disabled={isAllowLocked} 
-                                    type="number" 
-                                    min="0"
-                                    step="100"
-                                    placeholder="例: 3000" 
-                                    value={customAmount || ''} 
-                                    onChange={(e) => setCustomAmount(parseInt(e.target.value) || 0)} 
-                                    className="w-full bg-white p-3 rounded-lg border border-purple-200 text-xs text-black font-bold" 
-                                    required
-                                />
-                            </div>
-                            <div className="text-xs text-purple-500">※手入力その他の場合、内容と金額を必ず入力してください。</div>
-                        </div>
-                    ) : (
-                    <div className="space-y-2 mt-2">
-                        {/* 行き先（区分）の選択 */}
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label className="block text-xs font-bold text-black mb-1">行き先（区分）</label>
-                                <select 
-                                    disabled={isAllowLocked} 
-                                    value={destinationId} 
-                                    onChange={(e) => setDestinationId(e.target.value)} 
-                                    className="w-full bg-white p-3 rounded-lg border border-slate-200 text-xs text-black font-bold"
-                                >
-                                    {DESTINATIONS.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
-                                </select>
-                            </div>
-                            
-                            {/* 指定大会の場合は大会名を入力 */}
-                            {activityId === 'C' && (
-                            <div>
-                                    <label className="block text-xs font-bold text-blue-700 mb-1">大会名 ✏️</label>
-                                    <input 
-                                        disabled={isAllowLocked} 
-                                        type="text" 
-                                        placeholder="例: 県高校総体" 
-                                        value={competitionName} 
-                                        onChange={(e) => setCompetitionName(e.target.value)} 
-                                        className="w-full bg-blue-50 p-3 rounded-lg border-2 border-blue-300 text-xs text-black font-bold" 
-                                    />
-                                </div>
-                            )}
-                        </div>
-                        
-                        {/* 指定大会 + 運転あり + (県内120km以上 or 県外) の場合は目的地も入力 */}
-                        {activityId === 'C' && isDriving && (destinationId === 'inside_long' || destinationId === 'outside') && (
-                            <div>
-                                <label className="block text-xs font-bold text-green-700 mb-1">目的地（運転先） 🚗</label>
-                                <input 
-                                    disabled={isAllowLocked} 
-                                    type="text" 
-                                    placeholder="例: 県体育館" 
-                                    value={destinationDetail} 
-                                    onChange={(e) => setDestinationDetail(e.target.value)} 
-                                    className="w-full bg-green-50 p-3 rounded-lg border-2 border-green-300 text-xs text-black font-bold" 
-                                />
-                                <div className="text-xs text-green-600 mt-1">※県内120km以上または県外の運転先を入力してください</div>
-                            </div>
-                        )}
-                        
-                        {/* 指定大会以外 + 運転あり + (県内120km以上 or 県外) の場合は目的地入力を表示 */}
-                        {activityId !== 'C' && isDriving && (destinationId === 'inside_long' || destinationId === 'outside') && (
-                            <div>
-                                <label className="block text-xs font-bold text-green-700 mb-1">目的地（運転先） 🚗</label>
-                                <input 
-                                    disabled={isAllowLocked} 
-                                    type="text" 
-                                    placeholder="例: 県体育館" 
-                                    value={destinationDetail} 
-                                    onChange={(e) => setDestinationDetail(e.target.value)} 
-                                    className="w-full bg-green-50 p-3 rounded-lg border-2 border-green-300 text-xs text-black font-bold" 
-                                />
-                                <div className="text-xs text-green-600 mt-1">※県内120km以上または県外の運転先を入力してください</div>
-                            </div>
-                        )}
-                    </div>
-                    )}
-                    
-                    {/* 運転・宿泊・長期休業フラグ */}
-                    <div className="grid grid-cols-3 gap-3 mt-4">
-                        {/* F（校内合宿）の場合は運転なし */}
-                        {activityId !== 'F' && (
-                            <label className={`p-4 rounded-xl cursor-pointer border-2 text-center text-sm font-bold transition-all shadow-sm hover:shadow-md ${isDriving ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 shadow-blue-200' : 'border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:bg-slate-50'}`}>
-                            <input 
-                                disabled={isAllowLocked} 
-                                type="checkbox" 
-                                checked={isDriving} 
-                                onChange={e => setIsDriving(e.target.checked)} 
-                                className="hidden" 
-                            />
-                                <div className="text-2xl mb-1">🚗</div>
-                                <div>運転あり</div>
-                        </label>
-                        )}
-                        {activityId === 'F' && (
-                            <div className="p-4 rounded-xl border-2 border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200 text-center text-sm font-bold text-gray-600 shadow-sm">
-                                <div className="text-2xl mb-1">🚗</div>
-                                <div>校内合宿のため</div>
-                                <div className="text-xs mt-1">運転なし</div>
-                            </div>
-                        )}
-                        <label className={`p-4 rounded-xl cursor-pointer border-2 text-center text-sm font-bold transition-all shadow-sm hover:shadow-md ${isAccommodation ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-purple-100 text-purple-700 shadow-purple-200' : 'border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:bg-slate-50'}`}>
-                            <input 
-                                disabled={isAllowLocked} 
-                                type="checkbox" 
-                                checked={isAccommodation} 
-                                onChange={e => setIsAccommodation(e.target.checked)} 
-                                className="hidden" 
-                            />
-                            <div className="text-2xl mb-1">🏨</div>
-                            <div>宿泊あり</div>
-                        </label>
-                        <label className={`p-4 rounded-xl cursor-pointer border-2 text-center text-sm font-bold transition-all shadow-sm hover:shadow-md ${isLongBreak ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-orange-100 text-orange-700 shadow-orange-200' : 'border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:bg-slate-50'}`}>
-                            <input 
-                                disabled={isAllowLocked} 
-                                type="checkbox" 
-                                checked={isLongBreak} 
-                                onChange={e => setIsLongBreak(e.target.checked)} 
-                                className="hidden" 
-                            />
-                            <div className="text-2xl mb-1">🌴</div>
-                            <div>長期休業</div>
-                        </label>
-                    </div>
-                    
-                    {/* 計算ロジック説明 */}
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border-2 border-blue-300 mt-4 shadow-sm">
-                        <div className="text-xs sm:text-sm text-blue-800 mb-2">
-                            <span className="font-extrabold flex items-center gap-1">
-                                <span className="text-base">📋</span>
-                                <span>計算内訳</span>
-                            </span>
-                        </div>
-                        <div className="text-xs sm:text-sm text-slate-700 font-bold bg-white p-3 rounded-lg border border-blue-200">
-                            {(() => {
-                                const isWorkDay = !dayType.includes('休日') && (dayType.includes('勤務日') || dayType.includes('授業'))
-                                const effectiveWorkDay = isLongBreak ? false : isWorkDay
-                                const longBreakNote = isLongBreak && isWorkDay ? '（長期休業）' : ''
-                                
-                                if (isDriving) {
-                                    if (destinationId === 'outside') {
-                                        if (activityId === 'E') {
-                                            const amt = effectiveWorkDay ? 15000 - 2400 : 15000
-                                            return `【運転】県外${longBreakNote}: ${amt.toLocaleString()}円`
-                                        }
-                                        const baseAmount = 15000
-                                        const total = isAccommodation && (activityId === 'E' || activityId === 'F') ? baseAmount + 2400 : baseAmount
-                                        return `【運転】県外: ${total.toLocaleString()}円${isAccommodation ? ' (運転15,000円＋宿泊2,400円)' : ''}`
-                                    }
-                                    if (destinationId === 'inside_long') {
-                                        if (activityId === 'E') {
-                                            const amt = effectiveWorkDay ? 7500 - 2400 : 7500
-                                            return `【運転】県内120km以上${longBreakNote}: ${amt.toLocaleString()}円`
-                                        }
-                                        const baseAmount = 7500
-                                        const total = isAccommodation && (activityId === 'E' || activityId === 'F') ? baseAmount + 2400 : baseAmount
-                                        return `【運転】県内120km以上: ${total.toLocaleString()}円${isAccommodation ? ' (運転7,500円＋宿泊2,400円)' : ''}`
-                                    }
-                                    if (destinationId === 'inside_short' || destinationId === 'school') {
-                                        if (activityId === 'C') return '【運転】指定大会（管内）: 3,400円'
-                                        if (activityId === 'E' || activityId === 'F') {
-                                            if (effectiveWorkDay) {
-                                                return isAccommodation ? '【運転】勤務日（管内＋宿泊）: 7,500円' : '【運転】勤務日（管内）: 5,100円'
-                                            }
-                                            return `【運転】休日${longBreakNote}（管内）: 2,400円`
-                                        }
-                                    }
-                                }
-                                
-                                if (activityId === 'A') return `休日部活(1日)${longBreakNote}: 2,400円`
-                                if (activityId === 'B') return `休日部活(半日)${longBreakNote}: 1,700円`
-                                if (activityId === 'C') return '指定大会（運転なし）: 3,400円'
-                                if (activityId === 'D') return '指定外大会: 2,400円'
-                                if (activityId === 'E' || activityId === 'F') {
-                                    if (effectiveWorkDay) {
-                                        return isAccommodation ? '勤務日（宿泊のみ）: 2,400円' : '勤務日（運転なし）: 0円'
-                                    }
-                                    return `休日${longBreakNote}（運転なし）: 2,400円`
-                                }
-                                if (activityId === 'G') return '研修旅行等引率: 3,400円'
-                                if (activityId === 'H') return '宿泊指導: 2,400円'
-                                if (activityId === 'OTHER') return 'その他: 6,000円'
-                                return '計算中...'
-                            })()}
-                        </div>
-                    </div>
-                    
-                    <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-5 rounded-xl flex justify-between items-center mt-4 shadow-lg border-2 border-slate-700">
-                        <div className="flex items-center gap-2">
-                            <span className="text-2xl">💰</span>
-                            <span className="text-sm sm:text-base font-bold">支給予定額</span>
-                        </div>
-                        <span className="text-2xl sm:text-3xl font-extrabold bg-gradient-to-r from-yellow-200 to-yellow-300 bg-clip-text text-transparent">
-                            ¥{calculatedAmount.toLocaleString()}
-                        </span>
-                    </div>
-                </>
-                )}
-            </div>
+              <form onSubmit={handleSave} className={`flex flex-col gap-4 sm:gap-5 ${isAllowLocked ? 'opacity-60 pointer-events-none' : ''}`}>
+                <AllowanceInputForm
+                  value={allowanceInput}
+                  onChange={setAllowanceInput}
+                  dayType={dayType}
+                  isLocked={isAllowLocked}
+                  totalAmount={calculatedAmount}
+                />
 
-            {!isAllowLocked && (
-                <div className="flex flex-col gap-2 sm:gap-3">
-                  <button
-                    type="submit"
-                    disabled={submittingStatus}
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                  >
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="text-xl">💾</span>
-                      <span>この内容で保存する</span>
-                    </span>
-                  </button>
-                  {monthlyStatus === 'DRAFT' && (
+                {!isAllowLocked && (
+                  <div className="flex flex-col gap-2 sm:gap-3">
                     <button
-                      type="button"
-                      onClick={handleApplyFromInputModal}
+                      type="submit"
                       disabled={submittingStatus}
-                      className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-emerald-600 hover:to-emerald-700 active:from-emerald-700 active:to-emerald-800 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all disabled:opacity-50"
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                     >
                       <span className="flex items-center justify-center gap-2">
-                        <span className="text-xl">📤</span>
-                        <span>{submittingStatus ? '処理中…' : '保存して今月の手当を申請する'}</span>
+                        <span className="text-xl">💾</span>
+                        <span>この内容で保存する</span>
                       </span>
                     </button>
-                  )}
-                  {monthlyStatus === 'DRAFT' && (
-                    <p className="text-xs text-slate-500 text-center">
-                      申請後は管理者の承認または返却までは編集できません
-                    </p>
-                  )}
-                </div>
-            )}
-          </form>
+                    {monthlyStatus === 'DRAFT' && (
+                      <button
+                        type="button"
+                        onClick={handleApplyFromInputModal}
+                        disabled={submittingStatus}
+                        className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-emerald-600 hover:to-emerald-700 active:from-emerald-700 active:to-emerald-800 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all disabled:opacity-50"
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="text-xl">📤</span>
+                          <span>{submittingStatus ? '処理中…' : '保存して今月の手当を申請する'}</span>
+                        </span>
+                      </button>
+                    )}
+                    {monthlyStatus === 'DRAFT' && (
+                      <p className="text-xs text-slate-500 text-center">
+                        申請後は管理者の承認または返却までは編集できません
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form>
             </div>
           </div>
         </div>

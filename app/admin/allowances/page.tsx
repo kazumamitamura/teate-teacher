@@ -133,16 +133,12 @@ function AllowanceManagementContent() {
                 <div className="mt-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
                   <h3 className="font-bold text-slate-700 mb-2">現在の手当設定</h3>
                   <ul className="text-sm text-slate-600 space-y-1">
-                    <li>• A:休日部活(1日) → 3,400円</li>
-                    <li>• B:休日部活(半日) → 1,700円</li>
-                    <li>• C:指定大会 → 3,400円</li>
-                    <li>• D:指定外大会 → 2,400円</li>
-                    <li>• E:遠征 → 3,000円</li>
-                    <li>• F:合宿 → 5,000円</li>
-                    <li>• G:引率 → 2,400円</li>
-                    <li>• H:宿泊指導 → 6,000円</li>
-                    <li>• 県外マイクロバス運転 → 15,000円</li>
-                    <li>• 県内長距離運転 → 7,500円</li>
+                    <li>• 研修旅行等引率手当 → 3,400円</li>
+                    <li>• 出張手当（勤務日以外）→ 3,400円</li>
+                    <li>• 対外運動競技等引率手当 → 1,700〜10,000円</li>
+                    <li>• 部活動指導手当 → 1,700〜10,000円</li>
+                    <li>• 災害時等 → 6,000円</li>
+                    <li>• 宿泊業務手当（追加）→ 2,400〜4,700円</li>
                   </ul>
                 </div>
               </div>
