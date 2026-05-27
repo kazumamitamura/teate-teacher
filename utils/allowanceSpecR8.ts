@@ -214,7 +214,8 @@ export function getAmountBreakdown(state: AllowanceInputState, dayType: string):
   } else if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
     const sub = getSubOption(state.businessType, state.subOptionId)
     const biz = BUSINESS_TYPES.find((b) => b.id === state.businessType)
-    lines.push({ label: sub ? `${biz?.shortLabel}（${sub.label}）` : biz?.label ?? '', amount: main })
+    // コロン区切りで内側の括弧が二重にならないようにする
+    lines.push({ label: sub ? `${biz?.shortLabel}：${sub.label}` : biz?.label ?? '', amount: main })
   }
 
   if (state.accommodationEnabled && state.accommodationType) {
@@ -238,7 +239,8 @@ export function buildActivityTypeLabel(state: AllowanceInputState): string {
 
   if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
     const sub = getSubOption(state.businessType, state.subOptionId)
-    return sub ? `${biz.label}（${sub.label}）` : biz.label
+    // コロン区切りで内側の括弧が二重にならないようにする
+    return sub ? `${biz.label}：${sub.label}` : biz.label
   }
   return biz.label
 }

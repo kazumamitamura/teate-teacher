@@ -327,8 +327,8 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           <div className="flex flex-col gap-2">
             {subOptions.map((opt) => {
               const amt =
-                value.businessType === 'CLUB' && isWorkDay && 'workDayAmount' in opt
-                  ? (opt.workDayAmount ?? opt.amount)
+                value.businessType === 'CLUB' && isWorkDay && opt.workDayAmount != null
+                  ? opt.workDayAmount
                   : opt.amount
               return (
                 <ChoiceCard

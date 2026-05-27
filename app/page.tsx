@@ -914,7 +914,21 @@ export default function Home() {
     const { error } = await supabase.from('allowances').delete().eq('id', id)
     if (!error) fetchData(userId)
   }
-  
+
+  /** 履歴行の「修正」ボタン: 該当日付をセットしてモーダルを開く */
+  const handleEditAllowance = (dateStr: string) => {
+    if (isAllowLocked) {
+      alert(monthlyStatus === 'SUBMITTED' ? '申請中のため編集できません。返却後に編集してください。' : '承認済のため編集できません。')
+      return
+    }
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const date = new Date(y, m - 1, d)
+    setSelectedDate(date)
+    setSelectedDates([])
+    setIsMultiSelectMode(false)
+    setShowInputModal(true)
+  }
+
   const handleLogout = async () => { 
     await logout()
   }
@@ -1233,18 +1247,57 @@ export default function Home() {
         
         {/* 月次サマリー */}
         <div className="mt-8 bg-white rounded-2xl shadow-lg p-6">
-          <h3 className="font-bold text-gray-900 text-lg mb-4">{selectedDate.getMonth() + 1}月の手当履歴</h3>
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <h3 className="font-bold text-gray-900 text-lg">{selectedDate.getMonth() + 1}月の手当履歴</h3>
+            {!isAllowLocked && (
+              <button
+                onClick={() => { setIsMultiSelectMode(true); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition flex items-center gap-1"
+              >
+                📅 複数日まとめて修正
+              </button>
+            )}
+          </div>
+          {!isAllowLocked && (
+            <p className="text-xs text-slate-400 mb-3">
+              ✏️ 1件ずつ修正 → 「修正」ボタン　／　複数日まとめて修正 → 上の「複数日まとめて修正」ボタンで日付を選び直して上書き保存
+            </p>
+          )}
           <div className="space-y-2">
             {allowances.filter(i => { const d = new Date(i.date); return d.getMonth() === selectedDate.getMonth() && d.getFullYear() === selectedDate.getFullYear() }).map((item) => (
-              <div key={item.id} className="bg-slate-50 p-4 rounded-xl flex justify-between items-center border border-slate-100 hover:border-slate-300 transition">
-                <div className="flex items-center gap-4">
-                  <span className="font-bold text-gray-900 text-lg">{item.date.split('-')[2]}日</span>
-                  <span className="text-sm text-gray-900">{item.activity_type}</span>
-                  {item.destination_detail && <span className="text-xs text-gray-700">({item.destination_detail})</span>}
+              <div key={item.id} className="bg-slate-50 p-3 rounded-xl flex justify-between items-center border border-slate-100 hover:border-slate-200 transition">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                    {item.date.split('-')[2]}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-bold text-gray-900 leading-snug truncate">{item.activity_type}</span>
+                    {item.destination_type && (
+                      <span className="text-xs text-slate-500">📍 {item.destination_type}</span>
+                    )}
+                    {item.is_accommodation && (
+                      <span className="text-xs text-amber-600 font-bold">🏨 宿泊あり</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-gray-900 text-lg">¥{item.amount.toLocaleString()}</span>
-                  {!isAllowLocked && <button onClick={() => handleDelete(item.id, item.date)} className="text-slate-300 hover:text-red-500 transition text-xl">🗑</button>}
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="font-bold text-gray-900 text-base">¥{item.amount.toLocaleString()}</span>
+                  {!isAllowLocked && (
+                    <button
+                      onClick={() => handleEditAllowance(item.date)}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-white text-blue-700 border border-blue-200 hover:bg-blue-50 transition touch-manipulation"
+                    >
+                      ✏️ 修正
+                    </button>
+                  )}
+                  {!isAllowLocked && (
+                    <button
+                      onClick={() => handleDelete(item.id, item.date)}
+                      className="text-slate-300 hover:text-red-500 transition text-xl touch-manipulation"
+                    >
+                      🗑
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
