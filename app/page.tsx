@@ -48,6 +48,47 @@ const formatDate = (date: Date) => {
 }
 
 /**
+ * 日付から勤務区分文字列を導出するヘルパー。
+ * performSave での複数日ループでも同じロジックを使う。
+ */
+function getDayTypeForDate(
+  date: Date,
+  annualSchedules: { date: string; work_type: string; event_name: string }[],
+  schoolCalendar: { date: string; day_type: string }[],
+  getHoliday: (d: Date) => string | null,
+): string {
+  const dateStr = formatDate(date)
+  const annualSchedule = annualSchedules.find((s) => s.date === dateStr)
+  const dayOfWeek = date.getDay()
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+  const holidayName = getHoliday(date)
+  const isHoliday = holidayName !== null
+
+  if (annualSchedule) {
+    const workType = annualSchedule.work_type.toUpperCase()
+    let type: string
+    if (workType === 'A' || workType === 'B' || workType === 'C') {
+      type = '勤務日'
+    } else if (workType === '休' || workType === '祝') {
+      type = '休日'
+    } else {
+      type = isHoliday || isWeekend ? '休日' : '勤務日'
+    }
+    if (annualSchedule.event_name) type += `(${annualSchedule.event_name})`
+    return type
+  }
+
+  const calData = schoolCalendar.find((c) => c.date === dateStr)
+  if (calData) {
+    if (isHoliday && !calData.day_type.includes('休日')) return `休日(${holidayName})`
+    return calData.day_type
+  }
+
+  if (isHoliday) return `休日(${holidayName})`
+  return isWeekend ? '休日(仮)' : '勤務日(仮)'
+}
+
+/**
  * 日本の祝日を判定する関数
  * @param date 判定する日付
  * @returns 祝日名（祝日でない場合はnull）
@@ -643,7 +684,10 @@ export default function Home() {
     }
       
     // 保存対象の日付リスト（複数選択されている場合は全日付、そうでなければ単一日付）
-    const targetDates = selectedDates.length > 0 ? selectedDates : [selectedDate]
+    // 宿泊泊数の分散のため昇順ソート
+    const rawTargetDates = selectedDates.length > 0 ? selectedDates : [selectedDate]
+    const targetDates = [...rawTargetDates].sort((a, b) => a.getTime() - b.getTime())
+    const totalDates = targetDates.length
     
     console.log('保存するユーザー:', {
       user_id: user.id,
@@ -656,16 +700,19 @@ export default function Home() {
       (allowanceInput.accommodationEnabled && allowanceInput.accommodationType)
 
     if (hasEntry) {
-      const validation = validateAllowanceInput(allowanceInput, dayType)
+      const validation = validateAllowanceInput(allowanceInput, dayType, totalDates)
       if (!validation.ok) {
         alert(validation.message)
         return false
       }
 
-      const payload = serializeForSave(allowanceInput, dayType)
-
-      for (const date of targetDates) {
+      for (let dateIdx = 0; dateIdx < targetDates.length; dateIdx++) {
+        const date = targetDates[dateIdx]
         const dateStr = formatDate(date)
+
+        // 日付ごとに勤務区分を再計算（勤務日・休日混在対応）
+        const dateDayType = getDayTypeForDate(date, annualSchedules, schoolCalendar, getJapaneseHoliday)
+        const payload = serializeForSave(allowanceInput, dateDayType, dateIdx)
 
         const insertData: Record<string, unknown> = {
           user_id: user.id,
@@ -1257,6 +1304,7 @@ export default function Home() {
                   dayType={dayType}
                   isLocked={isAllowLocked}
                   totalAmount={calculatedAmount}
+                  totalDates={selectedDates.length > 0 ? selectedDates.length : 1}
                 />
 
                 {!isAllowLocked && (

@@ -11,6 +11,7 @@ export const REGION_OPTIONS = [
   { id: 'chugoku', label: '中国地方' },
   { id: 'shikoku', label: '四国地方' },
   { id: 'kyushu_okinawa', label: '九州・沖縄地方' },
+  { id: 'overseas', label: '海外' },
 ] as const
 
 export const BUSINESS_TYPES = [
@@ -20,7 +21,6 @@ export const BUSINESS_TYPES = [
     shortLabel: '研修旅行等引率',
     description: '日当は8時間程度（就寝は含みません）',
     icon: '🎒',
-    fixedAmount: 3400,
   },
   {
     id: 'TRIP',
@@ -55,6 +55,24 @@ export const BUSINESS_TYPES = [
 ] as const
 
 export type BusinessTypeId = (typeof BUSINESS_TYPES)[number]['id'] | ''
+
+/** 研修旅行等引率手当のサブ区分 */
+export const TRAINING_SUB_OPTIONS = [
+  {
+    id: 'domestic',
+    label: '🇯🇵 国内引率',
+    description: '国内の修学旅行・研修旅行',
+    amount: 3400,
+  },
+  {
+    id: 'overseas',
+    label: '🌏 海外引率',
+    description: '海外への修学旅行・研修旅行',
+    amount: 4700,
+  },
+] as const
+
+export type TrainingSubType = '' | 'domestic' | 'overseas'
 
 export const SPORTS_SUB_OPTIONS = [
   { id: 'sports_full', label: '1日（庄内・新庄・最上の運転を含む）', amount: 3400, isDriving: false },
@@ -94,19 +112,29 @@ export const ACCOMMODATION_TYPES = [
 export type AllowanceInputState = {
   regionId: string
   businessType: BusinessTypeId
+  /** 研修旅行等引率手当のサブ区分 */
+  trainingSubType: TrainingSubType
   subOptionId: string
   disasterNote: string
   accommodationEnabled: boolean
   accommodationType: '' | (typeof ACCOMMODATION_TYPES)[number]['id']
+  /**
+   * 複数日入力時の宿泊泊数。
+   * 0 or 1 の場合は全日付に同じ宿泊判定。
+   * 2以上の場合は日付を昇順ソートして先頭 N 日に宿泊手当を付ける（最終日は除く）。
+   */
+  accommodationNights: number
 }
 
 export const EMPTY_ALLOWANCE_INPUT: AllowanceInputState = {
   regionId: '',
   businessType: '',
+  trainingSubType: '',
   subOptionId: '',
   disasterNote: '',
   accommodationEnabled: false,
   accommodationType: '',
+  accommodationNights: 0,
 }
 
 const R8_META_PREFIX = '__r8__:'
@@ -130,7 +158,10 @@ function getSubOption(businessType: BusinessTypeId, subOptionId: string) {
 export function calculateMainAmount(state: AllowanceInputState, isWorkDay: boolean): number {
   if (!state.businessType) return 0
 
-  if (state.businessType === 'TRAINING') return 3400
+  if (state.businessType === 'TRAINING') {
+    const sub = TRAINING_SUB_OPTIONS.find((o) => o.id === state.trainingSubType)
+    return sub?.amount ?? 3400
+  }
 
   if (state.businessType === 'TRIP') {
     return isWorkDay ? 0 : 3400
@@ -167,7 +198,11 @@ export function getAmountBreakdown(state: AllowanceInputState, dayType: string):
   const main = calculateMainAmount(state, isWorkDay)
 
   if (state.businessType === 'TRAINING') {
-    lines.push({ label: '研修旅行等引率手当', amount: main })
+    const sub = TRAINING_SUB_OPTIONS.find((o) => o.id === state.trainingSubType)
+    const label = sub
+      ? `研修旅行等引率手当（${sub.label}）`
+      : '研修旅行等引率手当（国内/海外を選択してください）'
+    lines.push({ label, amount: main })
   } else if (state.businessType === 'TRIP') {
     if (isWorkDay) {
       lines.push({ label: '出張手当（勤務日のため支給なし）', amount: 0 })
@@ -196,6 +231,11 @@ export function buildActivityTypeLabel(state: AllowanceInputState): string {
   const biz = BUSINESS_TYPES.find((b) => b.id === state.businessType)
   if (!biz) return ''
 
+  if (state.businessType === 'TRAINING') {
+    const sub = TRAINING_SUB_OPTIONS.find((o) => o.id === state.trainingSubType)
+    return sub ? `${biz.label}（${sub.label}）` : biz.label
+  }
+
   if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
     const sub = getSubOption(state.businessType, state.subOptionId)
     return sub ? `${biz.label}（${sub.label}）` : biz.label
@@ -213,22 +253,44 @@ export function buildDestinationDetail(state: AllowanceInputState): string {
     if (acc) parts.push(`宿泊: ${acc.label}`)
   }
   const meta = {
-    v: 1,
+    v: 2,
     businessType: state.businessType,
+    trainingSubType: state.trainingSubType,
     subOptionId: state.subOptionId,
     disasterNote: state.disasterNote,
     accommodationEnabled: state.accommodationEnabled,
     accommodationType: state.accommodationType,
+    accommodationNights: state.accommodationNights,
   }
   const metaStr = R8_META_PREFIX + JSON.stringify(meta)
   if (parts.length === 0) return metaStr
   return parts.join(' / ') + ' ' + metaStr
 }
 
-export function serializeForSave(state: AllowanceInputState, dayType: string) {
+/**
+ * 日付1件ぶんのシリアライズ。
+ * multiDateIndex: 複数日のうち何番目か（0始まり）。宿泊泊数との比較に使用。
+ */
+export function serializeForSave(
+  state: AllowanceInputState,
+  dayType: string,
+  multiDateIndex = 0,
+) {
   const isWorkDay = isWorkDayFromDayType(dayType)
   const sub = getSubOption(state.businessType, state.subOptionId)
-  const amount = calculateR8Total(state, dayType)
+
+  // 宿泊判定: 泊数が設定されていれば日付インデックスで判定、なければ enabled フラグ通り
+  const nights = state.accommodationNights
+  const hasAccommodationThisDay =
+    state.accommodationEnabled &&
+    !!state.accommodationType &&
+    (nights <= 0 ? true : multiDateIndex < nights)
+
+  const stateForCalc: AllowanceInputState = {
+    ...state,
+    accommodationEnabled: hasAccommodationThisDay,
+  }
+  const amount = calculateR8Total(stateForCalc, dayType)
 
   return {
     activity_type: buildActivityTypeLabel(state),
@@ -236,7 +298,7 @@ export function serializeForSave(state: AllowanceInputState, dayType: string) {
     destination_detail: buildDestinationDetail(state),
     amount,
     is_driving: sub?.isDriving ?? false,
-    is_accommodation: state.accommodationEnabled && !!state.accommodationType,
+    is_accommodation: hasAccommodationThisDay,
   }
 }
 
@@ -258,10 +320,12 @@ export function parseStoredAllowance(allowance: {
       return {
         regionId: region,
         businessType: (meta.businessType as BusinessTypeId) ?? '',
+        trainingSubType: (meta.trainingSubType as TrainingSubType) ?? '',
         subOptionId: meta.subOptionId ?? '',
         disasterNote: meta.disasterNote ?? '',
         accommodationEnabled: !!meta.accommodationEnabled,
         accommodationType: (meta.accommodationType as AllowanceInputState['accommodationType']) ?? '',
+        accommodationNights: meta.accommodationNights ?? 0,
       }
     } catch {
       /* fall through */
@@ -290,6 +354,7 @@ function parseLegacyAllowance(allowance: {
         : 'shonai_mogami')
 
   let businessType: BusinessTypeId = ''
+  let trainingSubType: TrainingSubType = ''
   let subOptionId = ''
   let disasterNote = allowance.destination_detail ?? ''
   let accommodationEnabled = !!allowance.is_accommodation
@@ -297,9 +362,12 @@ function parseLegacyAllowance(allowance: {
     ? 'WITH_STUDENTS'
     : ''
 
-  if (act.includes('研修') || act.includes('G:')) businessType = 'TRAINING'
-  else if (act.includes('出張')) businessType = 'TRIP'
-  else if (act.includes('災害')) {
+  if (act.includes('研修') || act.includes('G:')) {
+    businessType = 'TRAINING'
+    trainingSubType = act.includes('海外') ? 'overseas' : 'domestic'
+  } else if (act.includes('出張')) {
+    businessType = 'TRIP'
+  } else if (act.includes('災害')) {
     businessType = 'DISASTER'
     disasterNote = (allowance.destination_detail ?? '').replace(/__r8__:.*/, '').trim()
   } else if (act.includes('指定') || act.includes('C:') || act.includes('対外')) {
@@ -307,7 +375,6 @@ function parseLegacyAllowance(allowance: {
     if (act.includes('半日')) subOptionId = 'sports_half'
     else if (allowance.is_driving && (allowance.amount ?? 0) >= 10000) subOptionId = 'sports_drive_out'
     else if (allowance.is_driving) subOptionId = 'sports_drive_mid'
-    else if (act.includes('半日')) subOptionId = 'sports_half'
     else subOptionId = 'sports_full'
   } else if (
     act.includes('部活') ||
@@ -325,16 +392,19 @@ function parseLegacyAllowance(allowance: {
   return {
     regionId: region,
     businessType,
+    trainingSubType,
     subOptionId,
     disasterNote,
     accommodationEnabled,
     accommodationType,
+    accommodationNights: 0,
   }
 }
 
 export function validateAllowanceInput(
   state: AllowanceInputState,
-  dayType: string
+  dayType: string,
+  totalDates = 1,
 ): { ok: boolean; message?: string } {
   const hasMain = !!state.businessType
   const hasAcc = state.accommodationEnabled && !!state.accommodationType
@@ -352,6 +422,10 @@ export function validateAllowanceInput(
 
   if (!hasMain) {
     return { ok: false, message: '宿泊のみの登録はできません。先に業務の種類を選んでください。' }
+  }
+
+  if (state.businessType === 'TRAINING' && !state.trainingSubType) {
+    return { ok: false, message: '国内引率・海外引率のどちらかを選んでください。' }
   }
 
   if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
@@ -372,7 +446,7 @@ export function validateAllowanceInput(
   if (state.businessType === 'TRIP' && isWorkDayFromDayType(dayType)) {
     return {
       ok: false,
-      message: '出張手当は勤務日には支給されません。別の業務の種類を選ぶか、勤務日でない日を選んでください。',
+      message: '出張手当は勤務日には支給されません。別の業務の種類を選んでください。',
     }
   }
 
@@ -380,8 +454,13 @@ export function validateAllowanceInput(
     return { ok: false, message: '宿泊業務手当の種類を選んでください。' }
   }
 
-  if (calculateR8Total(state, dayType) <= 0 && hasMain) {
-    return { ok: false, message: '支給額が0円です。選択内容を見直してください。' }
+  if (state.accommodationEnabled && state.accommodationNights > 0) {
+    if (state.accommodationNights >= totalDates) {
+      return {
+        ok: false,
+        message: `宿泊泊数（${state.accommodationNights}泊）は選択日数（${totalDates}日）より少なくしてください。最終日には宿泊手当が付かないため。`,
+      }
+    }
   }
 
   return { ok: true }
