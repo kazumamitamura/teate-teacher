@@ -198,6 +198,18 @@ export default function Home() {
   const [allowanceInput, setAllowanceInput] = useState<AllowanceInputState>(EMPTY_ALLOWANCE_INPUT)
   const [calculatedAmount, setCalculatedAmount] = useState(0)
 
+  /**
+   * 複数日入力モーダルでの「日付ごとの個別設定」
+   * key: YYYY-MM-DD、value: その日付専用の入力値
+   * マップにないdateは共通設定(allowanceInput)を使用する
+   */
+  const [perDateOverrides, setPerDateOverrides] = useState<Record<string, AllowanceInputState>>({})
+  /**
+   * 現在編集中の日付（null = 共通設定）
+   * 複数日モーダルでのみ使用
+   */
+  const [activeEditDate, setActiveEditDate] = useState<string | null>(null)
+
   // 月次申請ステータス
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatus>('DRAFT')
   const [submittingStatus, setSubmittingStatus] = useState(false)
@@ -695,15 +707,31 @@ export default function Home() {
       dates: targetDates.map(d => formatDate(d))
     })
 
+    // 共通設定またはいずれかの個別設定に入力があるか判定
     const hasEntry =
       allowanceInput.businessType ||
-      (allowanceInput.accommodationEnabled && allowanceInput.accommodationType)
+      (allowanceInput.accommodationEnabled && allowanceInput.accommodationType) ||
+      Object.values(perDateOverrides).some(o => o.businessType || (o.accommodationEnabled && o.accommodationType))
 
     if (hasEntry) {
-      const validation = validateAllowanceInput(allowanceInput, dayType, totalDates)
-      if (!validation.ok) {
-        alert(validation.message)
-        return false
+      // 個別設定がある場合は日付ごとにバリデーション
+      // 共通設定を使う日付のカウント（個別設定があるものを除く）
+      const commonDateCount = targetDates.filter(d => !perDateOverrides[formatDate(d)]).length
+      for (let dateIdx = 0; dateIdx < targetDates.length; dateIdx++) {
+        const date = targetDates[dateIdx]
+        const dateStr = formatDate(date)
+        const dateInput = perDateOverrides[dateStr] ?? allowanceInput
+        const dateDayType = getDayTypeForDate(date, annualSchedules, schoolCalendar, getJapaneseHoliday)
+        // 個別設定日は totalDates=1 で検証、共通設定日は共通日数で検証
+        const datesForValidation = perDateOverrides[dateStr] ? 1 : commonDateCount
+        const validation = validateAllowanceInput(dateInput, dateDayType, datesForValidation)
+        if (!validation.ok) {
+          const label = perDateOverrides[dateStr]
+            ? `${date.getMonth() + 1}/${date.getDate()}（個別設定）`
+            : '共通設定'
+          alert(`${label}:\n${validation.message}`)
+          return false
+        }
       }
 
       for (let dateIdx = 0; dateIdx < targetDates.length; dateIdx++) {
@@ -712,7 +740,11 @@ export default function Home() {
 
         // 日付ごとに勤務区分を再計算（勤務日・休日混在対応）
         const dateDayType = getDayTypeForDate(date, annualSchedules, schoolCalendar, getJapaneseHoliday)
-        const payload = serializeForSave(allowanceInput, dateDayType, dateIdx)
+        // 個別設定があればそちら、なければ共通設定を使用
+        const dateInput = perDateOverrides[dateStr] ?? allowanceInput
+        // 個別設定の場合は accommodationNights 分散を使わない（dateIdx=0 で常に有効）
+        const multiIdx = perDateOverrides[dateStr] ? 0 : dateIdx
+        const payload = serializeForSave(dateInput, dateDayType, multiIdx)
 
         const insertData: Record<string, unknown> = {
           user_id: user.id,
@@ -926,6 +958,8 @@ export default function Home() {
     setSelectedDate(date)
     setSelectedDates([])
     setIsMultiSelectMode(false)
+    setPerDateOverrides({})
+    setActiveEditDate(null)
     setShowInputModal(true)
   }
 
@@ -989,8 +1023,10 @@ export default function Home() {
       alert('日付を選択してください')
       return
     }
-    
     setIsMultiSelectMode(false)
+    // 個別設定をリセットして新規モーダルを開く
+    setPerDateOverrides({})
+    setActiveEditDate(null)
     setShowInputModal(true)
   }
   
@@ -1318,20 +1354,84 @@ export default function Home() {
                 {selectedDates.length > 0 ? (
                   <>
                     <h2 className="font-bold text-gray-900 text-base sm:text-lg mb-2">
-                      📅 複数日一括入力（{selectedDates.length}日分）
+                      📅 複数日入力（{selectedDates.length}日分）
                     </h2>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedDates.slice(0, 10).map((date, index) => (
-                        <span key={index} className="text-xs px-2 py-1 rounded font-bold bg-blue-100 text-blue-700">
-                          {date.getMonth() + 1}/{date.getDate()}
+                    <p className="text-xs text-slate-500 mb-2">共通設定 or 日付をタップして個別設定</p>
+                    {/* 日付タブ：共通設定 + 日付ごと */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {/* 共通設定タブ */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveEditDate(null)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition touch-manipulation ${
+                          activeEditDate === null
+                            ? 'bg-blue-600 text-white shadow'
+                            : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-50'
+                        }`}
+                      >
+                        🔗 共通設定
+                        {Object.keys(perDateOverrides).length > 0 && activeEditDate !== null && (
+                          <span className="ml-1 text-blue-300">
+                            ({selectedDates.filter(d => !perDateOverrides[formatDate(d)]).length}日)
+                          </span>
+                        )}
+                      </button>
+                      {/* 日付ごとタブ */}
+                      {[...selectedDates].sort((a, b) => a.getTime() - b.getTime()).map((date) => {
+                        const dateStr = formatDate(date)
+                        const hasOverride = !!perDateOverrides[dateStr]
+                        const isActive = activeEditDate === dateStr
+                        return (
+                          <button
+                            key={dateStr}
+                            type="button"
+                            onClick={() => {
+                              setActiveEditDate(dateStr)
+                              if (!perDateOverrides[dateStr]) {
+                                // 初回タップ時：既存データまたは共通設定で初期化
+                                const existing = allowances.find(a => a.date === dateStr)
+                                const init: AllowanceInputState = existing
+                                  ? { ...parseStoredAllowance(existing), accommodationNights: 0 }
+                                  : { ...allowanceInput, accommodationNights: 0 }
+                                setPerDateOverrides(prev => ({ ...prev, [dateStr]: init }))
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition touch-manipulation flex items-center gap-1 ${
+                              isActive
+                                ? 'bg-purple-600 text-white shadow'
+                                : hasOverride
+                                  ? 'bg-purple-100 border border-purple-400 text-purple-800'
+                                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {date.getMonth() + 1}/{date.getDate()}
+                            {hasOverride && <span className="text-purple-400">✏️</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* 個別設定中の場合：リセットボタン */}
+                    {activeEditDate && (
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-xs font-bold text-purple-700">
+                          ✏️ {(() => { const [y,m,d] = activeEditDate.split('-').map(Number); return `${m}月${d}日 の個別設定` })()}
                         </span>
-                      ))}
-                      {selectedDates.length > 10 && (
-                        <span className="text-xs px-2 py-1 rounded font-bold bg-gray-100 text-gray-600">
-                          他 {selectedDates.length - 10}日
-                        </span>
-                      )}
-                           </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPerDateOverrides(prev => {
+                              const next = { ...prev }
+                              delete next[activeEditDate]
+                              return next
+                            })
+                            setActiveEditDate(null)
+                          }}
+                          className="text-xs text-slate-500 hover:text-red-600 border border-slate-200 px-2 py-1 rounded-lg transition"
+                        >
+                          🔄 共通設定に戻す
+                        </button>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
@@ -1341,24 +1441,59 @@ export default function Home() {
                       <span className={`text-xs px-2 py-1 rounded font-bold ${dayType.includes('休日') || dayType.includes('週休') ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
                         {dayType}
                       </span>
-                </div>
+                    </div>
                   </>
               )}
               </div>
-              <button onClick={() => { setShowInputModal(false); setSelectedDates([]); setIsMultiSelectMode(false); }} className="text-slate-400 hover:text-slate-600 active:text-slate-800 text-3xl sm:text-2xl font-bold ml-2 touch-manipulation">×</button>
+              <button onClick={() => { setShowInputModal(false); setSelectedDates([]); setIsMultiSelectMode(false); setPerDateOverrides({}); setActiveEditDate(null); }} className="text-slate-400 hover:text-slate-600 active:text-slate-800 text-3xl sm:text-2xl font-bold ml-2 touch-manipulation">×</button>
             </div>
 
             {/* モーダルコンテンツ */}
             <div className="p-4 sm:p-6">
+              {/* 個別設定中の日付の勤務区分バッジ */}
+              {selectedDates.length > 0 && activeEditDate && (() => {
+                const [y,m,d] = activeEditDate.split('-').map(Number)
+                const dt = getDayTypeForDate(new Date(y, m-1, d), annualSchedules, schoolCalendar, getJapaneseHoliday)
+                return (
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className={`text-xs px-2 py-1 rounded font-bold ${dt.includes('休日') ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                      {dt}
+                    </span>
+                    <span className="text-xs text-slate-500">（この日の勤務区分）</span>
+                  </div>
+                )
+              })()}
               <form onSubmit={handleSave} className={`flex flex-col gap-4 sm:gap-5 ${isAllowLocked ? 'opacity-60 pointer-events-none' : ''}`}>
-                <AllowanceInputForm
-                  value={allowanceInput}
-                  onChange={setAllowanceInput}
-                  dayType={dayType}
-                  isLocked={isAllowLocked}
-                  totalAmount={calculatedAmount}
-                  totalDates={selectedDates.length > 0 ? selectedDates.length : 1}
-                />
+                {(() => {
+                  // アクティブな入力値と dayType を決定
+                  const activeInput = selectedDates.length > 0 && activeEditDate
+                    ? (perDateOverrides[activeEditDate] ?? allowanceInput)
+                    : allowanceInput
+                  const setActiveInput = (v: AllowanceInputState) => {
+                    if (selectedDates.length > 0 && activeEditDate) {
+                      setPerDateOverrides(prev => ({ ...prev, [activeEditDate]: v }))
+                    } else {
+                      setAllowanceInput(v)
+                    }
+                  }
+                  const activeDayType = selectedDates.length > 0 && activeEditDate
+                    ? (() => { const [y,m,d] = activeEditDate.split('-').map(Number); return getDayTypeForDate(new Date(y,m-1,d), annualSchedules, schoolCalendar, getJapaneseHoliday) })()
+                    : dayType
+                  const activeTotalDates = selectedDates.length > 0 && !activeEditDate
+                    ? selectedDates.filter(d => !perDateOverrides[formatDate(d)]).length || 1
+                    : 1
+                  const activeTotalAmount = calculateR8Total(activeInput, activeDayType)
+                  return (
+                    <AllowanceInputForm
+                      value={activeInput}
+                      onChange={setActiveInput}
+                      dayType={activeDayType}
+                      isLocked={isAllowLocked}
+                      totalAmount={activeTotalAmount}
+                      totalDates={activeTotalDates}
+                    />
+                  )
+                })()}
 
                 {!isAllowLocked && (
                   <div className="flex flex-col gap-2 sm:gap-3">
