@@ -426,7 +426,7 @@ export function validateAllowanceInput(
     if (state.regionId || state.subOptionId || state.disasterNote.trim()) {
       return {
         ok: false,
-        message: '入力が途中です。業務の種類または宿泊業務手当を選ぶか、「手当なし」を選んでください。',
+        message: '入力が途中です。業務の種類または宿泊業務手当を選んでください。',
       }
     }
     return { ok: true }

@@ -176,31 +176,6 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
 
-      {/* なしボタン */}
-      <button
-        type="button"
-        disabled={isLocked}
-        onClick={() =>
-          onChange({
-            regionId: '',
-            businessType: '',
-            trainingSubType: '',
-            subOptionId: '',
-            disasterNote: '',
-            accommodationEnabled: false,
-            accommodationType: '',
-            accommodationNights: 0,
-          })
-        }
-        className={`rounded-xl border-2 py-3 text-sm font-bold transition ${
-          !value.businessType && !value.accommodationEnabled
-            ? 'border-slate-500 bg-slate-100 text-slate-800'
-            : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-        }`}
-      >
-        この日は手当なし（登録を削除）
-      </button>
-
       {/* ① 行き先（地域） */}
       <Section
         step={stepIndex++}
