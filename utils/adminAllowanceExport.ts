@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getMonthDateRange, type UserOption } from './adminAllowanceData'
+import { formatAllowanceForAdmin } from './adminAllowanceDisplay'
 
 type AllowanceRow = {
   date?: string
@@ -53,20 +54,23 @@ export async function exportIndividualMonthly(
     ['氏名', `${userName} 様`, '支給合計額', total],
     ['対象月', `${year}年${month}月`, '活動内訳', `合宿:${campCount}日 / 遠征:${expeditionCount}日`],
     [],
-    ['日付', '曜日', '手当区分', '業務内容', '宿泊', '運転', '金額'],
+    ['日付', '曜日', '手当区分', '行き先', '宿泊', '運転', '金額'],
   ]
-  const bodyRows = rows.map((r) => [
-    r.date || '',
-    dayOfWeek(r.date || ''),
-    r.activity_type || '',
-    r.destination_detail || '-',
-    r.is_accommodation ? '○' : '',
-    r.is_driving ? '○' : '',
-    r.amount ?? 0,
-  ])
+  const bodyRows = rows.map((r) => {
+    const view = formatAllowanceForAdmin(r)
+    return [
+      r.date || '',
+      dayOfWeek(r.date || ''),
+      view.activityLabel,
+      view.regionLabel === '-' ? '' : view.regionLabel,
+      view.accommodationLabel || '',
+      view.hasDriving ? 'あり' : '',
+      r.amount ?? 0,
+    ]
+  })
   const allRows = [...headerRows, ...bodyRows, ['合計', '', '', '', '', '', total]]
   const ws = XLSX.utils.aoa_to_sheet(allRows)
-  ws['!cols'] = [{ wch: 12 }, { wch: 5 }, { wch: 25 }, { wch: 30 }, { wch: 5 }, { wch: 5 }, { wch: 10 }]
+  ws['!cols'] = [{ wch: 12 }, { wch: 5 }, { wch: 28 }, { wch: 14 }, { wch: 24 }, { wch: 6 }, { wch: 10 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '手当申請書')
   XLSX.writeFile(wb, `${yearMonth}_手当申請書_${userName}.xlsx`)

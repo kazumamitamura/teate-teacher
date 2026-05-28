@@ -7,6 +7,13 @@ import {
   type AllowanceRecord,
   type UserOption,
 } from '@/utils/adminAllowanceData'
+import { formatAllowanceForAdmin } from '@/utils/adminAllowanceDisplay'
+import {
+  AllowanceAccommodationCell,
+  AllowanceActivityCell,
+  AllowanceDrivingCell,
+  AllowanceRegionCell,
+} from '@/components/admin/AllowanceAdminCells'
 import { AllowanceFilters } from './AllowanceFilters'
 
 type Props = {
@@ -20,13 +27,8 @@ type Props = {
   onUserChange: (id: string) => void
 }
 
-function hasDestination(a: AllowanceRecord) {
-  return (
-    a.is_driving &&
-    a.destination_type &&
-    String(a.destination_type).trim() !== '' &&
-    a.destination_type !== 'null'
-  )
+function formatRow(allowance: AllowanceRecord) {
+  return formatAllowanceForAdmin(allowance)
 }
 
 export function AllowancePreviewPanel({
@@ -130,10 +132,9 @@ export function AllowancePreviewPanel({
                         <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">日付</th>
                         <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">曜日</th>
                         <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">手当区分</th>
-                        <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">業務内容</th>
-                        <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">宿泊</th>
+                        <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">行き先</th>
+                        <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">宿泊</th>
                         <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">運転</th>
-                        <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">行き先（区分）</th>
                         <th className="px-4 py-3 text-right text-sm font-bold text-gray-700">金額</th>
                       </tr>
                     </thead>
@@ -141,26 +142,24 @@ export function AllowancePreviewPanel({
                       {userAllowances.map((allowance, index) => {
                         const date = new Date(allowance.date)
                         const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()]
+                        const view = formatRow(allowance)
                         return (
                           <tr key={allowance.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="px-4 py-3 text-sm text-gray-900">{allowance.date}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{allowance.date}</td>
                             <td className="px-4 py-3 text-sm text-gray-600">{dayOfWeek}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">{allowance.activity_type}</td>
-                            <td className="px-4 py-3 text-sm text-gray-700">{allowance.destination_detail || '-'}</td>
-                            <td className="px-4 py-3 text-center">
-                              {allowance.is_accommodation && <span className="text-blue-600">○</span>}
+                            <td className="px-4 py-3">
+                              <AllowanceActivityCell view={view} />
+                            </td>
+                            <td className="px-4 py-3">
+                              <AllowanceRegionCell label={view.regionLabel} />
+                            </td>
+                            <td className="px-4 py-3">
+                              <AllowanceAccommodationCell label={view.accommodationLabel} />
                             </td>
                             <td className="px-4 py-3 text-center">
-                              {allowance.is_driving && <span className="text-green-600">○</span>}
+                              <AllowanceDrivingCell hasDriving={view.hasDriving} />
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-700">
-                              {hasDestination(allowance) ? (
-                                <span className="font-medium text-gray-900">{String(allowance.destination_type)}</span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                            <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 whitespace-nowrap">
                               ¥{allowance.amount.toLocaleString()}
                             </td>
                           </tr>
@@ -169,7 +168,7 @@ export function AllowancePreviewPanel({
                     </tbody>
                     <tfoot>
                       <tr className="bg-blue-50 font-bold">
-                        <td colSpan={7} className="px-4 py-3 text-right text-gray-900">
+                        <td colSpan={6} className="px-4 py-3 text-right text-gray-900">
                           合計
                         </td>
                         <td className="px-4 py-3 text-right text-blue-900 text-lg">¥{total.toLocaleString()}</td>
@@ -205,10 +204,9 @@ export function AllowancePreviewPanel({
                 <th className="px-4 py-3 text-left font-bold">曜日</th>
                 <th className="px-4 py-3 text-left font-bold">氏名</th>
                 <th className="px-4 py-3 text-left font-bold">手当区分</th>
-                <th className="px-4 py-3 text-left font-bold">業務内容</th>
-                <th className="px-4 py-3 text-center font-bold">宿泊</th>
+                <th className="px-4 py-3 text-left font-bold">行き先</th>
+                <th className="px-4 py-3 text-left font-bold">宿泊</th>
                 <th className="px-4 py-3 text-center font-bold">運転</th>
-                <th className="px-4 py-3 text-left font-bold">行き先（区分）</th>
                 <th className="px-4 py-3 text-right font-bold">金額</th>
               </tr>
             </thead>
@@ -226,6 +224,7 @@ export function AllowancePreviewPanel({
                     user?.display_name ??
                     user?.email ??
                     (allowance.user_email ? `氏名未登録（${allowance.user_email}）` : 'ユーザー名未登録')
+                  const view = formatRow(allowance)
 
                   return (
                     <tr key={allowance.id} className="border-b border-gray-200 hover:bg-gray-50">
@@ -233,7 +232,7 @@ export function AllowancePreviewPanel({
                         <>
                           <td
                             rowSpan={dateAllowances.length}
-                            className="px-4 py-3 text-sm font-bold text-gray-900 border-r border-gray-200"
+                            className="px-4 py-3 text-sm font-bold text-gray-900 border-r border-gray-200 whitespace-nowrap"
                           >
                             {date}
                           </td>
@@ -245,23 +244,20 @@ export function AllowancePreviewPanel({
                           </td>
                         </>
                       )}
-                      <td className="px-4 py-3 text-sm text-gray-900 font-medium">{displayName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{allowance.activity_type}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{allowance.destination_detail || '-'}</td>
-                      <td className="px-4 py-3 text-center">
-                        {allowance.is_accommodation && <span className="text-blue-600">○</span>}
+                      <td className="px-4 py-3 text-sm text-gray-900 font-medium whitespace-nowrap">{displayName}</td>
+                      <td className="px-4 py-3">
+                        <AllowanceActivityCell view={view} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <AllowanceRegionCell label={view.regionLabel} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <AllowanceAccommodationCell label={view.accommodationLabel} />
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {allowance.is_driving && <span className="text-green-600">○</span>}
+                        <AllowanceDrivingCell hasDriving={view.hasDriving} />
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {hasDestination(allowance) ? (
-                          <span className="font-medium text-gray-900">{String(allowance.destination_type)}</span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                      <td className="px-4 py-3 text-right text-sm font-bold text-gray-900 whitespace-nowrap">
                         ¥{allowance.amount.toLocaleString()}
                       </td>
                     </tr>
@@ -271,7 +267,7 @@ export function AllowancePreviewPanel({
             </tbody>
             <tfoot>
               <tr className="bg-blue-50 font-bold">
-                <td colSpan={8} className="px-4 py-3 text-right text-gray-900">
+                <td colSpan={7} className="px-4 py-3 text-right text-gray-900">
                   合計
                 </td>
                 <td className="px-4 py-3 text-right text-blue-900 text-lg">
