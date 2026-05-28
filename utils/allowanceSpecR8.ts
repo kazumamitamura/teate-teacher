@@ -411,6 +411,23 @@ function parseLegacyAllowance(allowance: {
   }
 }
 
+/** 業務の種類なしで郷友寮宿泊業務（宿直）のみ選択されている */
+export function isDormOnlySelection(state: AllowanceInputState): boolean {
+  return (
+    !state.businessType &&
+    state.accommodationEnabled &&
+    state.accommodationType === 'DORM'
+  )
+}
+
+/** 行き先（地域）の選択が必須かどうか */
+export function isRegionRequired(state: AllowanceInputState): boolean {
+  if (isDormOnlySelection(state)) return false
+  const hasMain = !!state.businessType
+  const hasAcc = state.accommodationEnabled && !!state.accommodationType
+  return hasMain || hasAcc
+}
+
 export function validateAllowanceInput(
   state: AllowanceInputState,
   dayType: string,
@@ -432,7 +449,7 @@ export function validateAllowanceInput(
     return { ok: true }
   }
 
-  if (!state.regionId) {
+  if (isRegionRequired(state) && !state.regionId) {
     return { ok: false, message: '行き先（地域）を選んでください。' }
   }
 

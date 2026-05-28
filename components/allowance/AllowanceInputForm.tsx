@@ -10,6 +10,8 @@ import {
   type AllowanceInputState,
   type AmountLine,
   getAmountBreakdown,
+  isDormOnlySelection,
+  isRegionRequired,
   isWorkDayFromDayType,
 } from '@/utils/allowanceSpecR8'
 
@@ -176,49 +178,51 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
 
-      {/* ① 行き先（地域） */}
-      <Section
-        step={stepIndex++}
-        title="行き先（地域）"
-        hint="必須：会計処理に必要です。当てはまる地域を1つ選んでください。"
-        color="blue"
-      >
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {REGION_OPTIONS.map((r) => {
-            const isOverseas = r.id === 'overseas'
-            return (
-              <button
-                key={r.id}
-                type="button"
-                disabled={isLocked}
-                onClick={() => {
-                  patch({ regionId: r.id })
-                  // 海外を選んで研修旅行等引率手当なら自動で海外引率を提案
-                  if (isOverseas && value.businessType === 'TRAINING' && !value.trainingSubType) {
-                    patch({ regionId: r.id, trainingSubType: 'overseas' })
-                  }
-                }}
-                className={`rounded-xl px-2 py-3 text-xs sm:text-sm font-bold transition touch-manipulation border-2 ${
-                  value.regionId === r.id
-                    ? isOverseas
-                      ? 'bg-violet-600 text-white border-violet-600 shadow-md'
-                      : 'bg-blue-600 text-white border-blue-600 shadow-md'
-                    : isOverseas
-                      ? 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300'
-                }`}
-              >
-                {isOverseas ? `🌏 ${r.label}` : r.label}
-              </button>
-            )
-          })}
-        </div>
-        {!value.regionId && (value.businessType || value.accommodationEnabled) && (
-          <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700">
-            ⚠️ 行き先を選んでください（必須）
-          </p>
-        )}
-      </Section>
+      {/* ① 行き先（地域） — 郷友寮宿泊業務（宿直）のみの場合は不要 */}
+      {!isDormOnlySelection(value) && (
+        <Section
+          step={stepIndex++}
+          title="行き先（地域）"
+          hint="必須：会計処理に必要です。当てはまる地域を1つ選んでください。"
+          color="blue"
+        >
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {REGION_OPTIONS.map((r) => {
+              const isOverseas = r.id === 'overseas'
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  disabled={isLocked}
+                  onClick={() => {
+                    patch({ regionId: r.id })
+                    // 海外を選んで研修旅行等引率手当なら自動で海外引率を提案
+                    if (isOverseas && value.businessType === 'TRAINING' && !value.trainingSubType) {
+                      patch({ regionId: r.id, trainingSubType: 'overseas' })
+                    }
+                  }}
+                  className={`rounded-xl px-2 py-3 text-xs sm:text-sm font-bold transition touch-manipulation border-2 ${
+                    value.regionId === r.id
+                      ? isOverseas
+                        ? 'bg-violet-600 text-white border-violet-600 shadow-md'
+                        : 'bg-blue-600 text-white border-blue-600 shadow-md'
+                      : isOverseas
+                        ? 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300'
+                  }`}
+                >
+                  {isOverseas ? `🌏 ${r.label}` : r.label}
+                </button>
+              )
+            })}
+          </div>
+          {!value.regionId && isRegionRequired(value) && (
+            <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700">
+              ⚠️ 行き先を選んでください（必須）
+            </p>
+          )}
+        </Section>
+      )}
 
       {/* ② 業務の種類 */}
       <Section
