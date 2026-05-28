@@ -48,30 +48,31 @@ export async function fetchAllowancesForPeriod(
 ): Promise<AllowanceRecord[]> {
   const { start, end } = getMonthDateRange(opts.year, opts.month)
 
-  const buildQuery = (withJoin: boolean) => {
-    let q = supabase
-      .from('allowances')
-      .select(
-        withJoin
-          ? `*, user_profiles ( user_id, display_name )`
-          : '*'
-      )
-      .gte('date', start)
-      .lte('date', end)
-    if (opts.userId) q = q.eq('user_id', opts.userId)
-    return q.order('date', { ascending: true })
-  }
+  let query = supabase
+    .from('allowances')
+    .select('*')
+    .gte('date', start)
+    .lte('date', end)
+  if (opts.userId) query = query.eq('user_id', opts.userId)
 
-  let res = await buildQuery(true)
-  if (
-    res.error &&
-    (res.error.message?.includes('foreign key') ||
-      res.error.code === 'PGRST301' ||
-      res.error.code === '42P01')
-  ) {
-    res = await buildQuery(false)
-  }
+  const { data, error } = await query.order('date', { ascending: true })
+  if (error) throw new Error(error.message)
 
-  if (res.error) throw new Error(res.error.message)
-  return (res.data as AllowanceRecord[]) ?? []
+  const allowances = (data as AllowanceRecord[]) ?? []
+  if (allowances.length === 0) return allowances
+
+  const userIds = [...new Set(allowances.map((a) => a.user_id))]
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select('user_id, display_name')
+    .in('user_id', userIds)
+
+  const profileMap = new Map(
+    (profiles ?? []).map((p) => [p.user_id, { user_id: p.user_id, display_name: p.display_name }])
+  )
+
+  return allowances.map((a) => ({
+    ...a,
+    user_profiles: profileMap.get(a.user_id) ?? null,
+  }))
 }
