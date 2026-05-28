@@ -376,17 +376,13 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
       <Section
         step={stepIndex++}
         title="宿泊業務手当（追加・任意）"
-        hint="日当とは別に支給されます。宿泊がある場合だけオンにしてください"
+        hint="日当とは別に支給されます。業務の種類がなくても宿泊業務手当だけ登録できます"
         color="amber"
       >
-        <label className={`mb-3 flex items-center gap-3 rounded-xl border-2 p-4 ${
-          value.businessType
-            ? 'cursor-pointer border-amber-200 bg-white hover:bg-amber-50'
-            : 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-60'
-        }`}>
+        <label className="mb-3 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-amber-200 bg-white p-4 hover:bg-amber-50">
           <input
             type="checkbox"
-            disabled={isLocked || !value.businessType}
+            disabled={isLocked}
             checked={value.accommodationEnabled}
             onChange={(e) =>
               patch({
@@ -399,10 +395,6 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           />
           <span className="font-bold text-slate-800">宿泊業務手当を追加する</span>
         </label>
-
-        {!value.businessType && (
-          <p className="mb-2 text-xs text-slate-500">先に「業務の種類」を選ぶと宿泊を追加できます。</p>
-        )}
 
         {value.accommodationEnabled && (
           <>

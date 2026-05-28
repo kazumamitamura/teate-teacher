@@ -230,7 +230,13 @@ export function getAmountBreakdown(state: AllowanceInputState, dayType: string):
 
 /** DB保存用の表示ラベル */
 export function buildActivityTypeLabel(state: AllowanceInputState): string {
-  if (!state.businessType) return ''
+  if (!state.businessType) {
+    if (state.accommodationEnabled && state.accommodationType) {
+      const acc = ACCOMMODATION_TYPES.find((a) => a.id === state.accommodationType)
+      return acc ? `宿泊業務手当（${acc.label}）` : '宿泊業務手当'
+    }
+    return ''
+  }
   const biz = BUSINESS_TYPES.find((b) => b.id === state.businessType)
   if (!biz) return ''
 
@@ -414,18 +420,20 @@ export function validateAllowanceInput(
   const hasAcc = state.accommodationEnabled && !!state.accommodationType
 
   if (!hasMain && !hasAcc) {
+    if (state.accommodationEnabled) {
+      return { ok: false, message: '宿泊業務手当の種類を選んでください。' }
+    }
     if (state.regionId || state.subOptionId || state.disasterNote.trim()) {
-      return { ok: false, message: '入力が途中です。業務の種類を選ぶか、「手当なし」を選んでください。' }
+      return {
+        ok: false,
+        message: '入力が途中です。業務の種類または宿泊業務手当を選ぶか、「手当なし」を選んでください。',
+      }
     }
     return { ok: true }
   }
 
   if (!state.regionId) {
     return { ok: false, message: '行き先（地域）を選んでください。' }
-  }
-
-  if (!hasMain) {
-    return { ok: false, message: '宿泊のみの登録はできません。先に業務の種類を選んでください。' }
   }
 
   if (state.businessType === 'TRAINING' && !state.trainingSubType) {
