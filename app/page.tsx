@@ -9,6 +9,7 @@ import 'react-calendar/dist/Calendar.css'
 import { AllowanceInputForm } from '@/components/allowance/AllowanceInputForm'
 import {
   EMPTY_ALLOWANCE_INPUT,
+  buildInputForMultiDateSave,
   calculateR8Total,
   parseStoredAllowance,
   serializeForSave,
@@ -715,16 +716,18 @@ export default function Home() {
 
     if (hasEntry) {
       // 個別設定がある場合は日付ごとにバリデーション
-      // 共通設定を使う日付のカウント（個別設定があるものを除く）
-      const commonDateCount = targetDates.filter(d => !perDateOverrides[formatDate(d)]).length
       for (let dateIdx = 0; dateIdx < targetDates.length; dateIdx++) {
         const date = targetDates[dateIdx]
         const dateStr = formatDate(date)
+        const isOverride = !!perDateOverrides[dateStr]
         const dateInput = perDateOverrides[dateStr] ?? allowanceInput
         const dateDayType = getDayTypeForDate(date, annualSchedules, schoolCalendar, getJapaneseHoliday)
-        // 個別設定日は totalDates=1 で検証、共通設定日は共通日数で検証
-        const datesForValidation = perDateOverrides[dateStr] ? 1 : commonDateCount
-        const validation = validateAllowanceInput(dateInput, dateDayType, datesForValidation)
+        // 宿泊泊数は選択日数全体で検証（中間日の個別設定でも連泊として扱う）
+        const inputForValidation = isOverride
+          ? { ...dateInput, accommodationNights: 0 }
+          : allowanceInput
+        const datesForValidation = isOverride ? 1 : totalDates
+        const validation = validateAllowanceInput(inputForValidation, dateDayType, datesForValidation)
         if (!validation.ok) {
           const label = perDateOverrides[dateStr]
             ? `${date.getMonth() + 1}/${date.getDate()}（個別設定）`
@@ -741,10 +744,13 @@ export default function Home() {
         // 日付ごとに勤務区分を再計算（勤務日・休日混在対応）
         const dateDayType = getDayTypeForDate(date, annualSchedules, schoolCalendar, getJapaneseHoliday)
         // 個別設定があればそちら、なければ共通設定を使用
+        const isOverride = !!perDateOverrides[dateStr]
         const dateInput = perDateOverrides[dateStr] ?? allowanceInput
-        // 個別設定の場合は accommodationNights 分散を使わない（dateIdx=0 で常に有効）
-        const multiIdx = perDateOverrides[dateStr] ? 0 : dateIdx
-        const payload = serializeForSave(dateInput, dateDayType, multiIdx)
+        const inputForSave =
+          totalDates > 1
+            ? buildInputForMultiDateSave(allowanceInput, dateInput, isOverride)
+            : dateInput
+        const payload = serializeForSave(inputForSave, dateDayType, dateIdx)
 
         const insertData: Record<string, unknown> = {
           user_id: user.id,
@@ -1470,7 +1476,7 @@ export default function Home() {
                     ? (() => { const [y,m,d] = activeEditDate.split('-').map(Number); return getDayTypeForDate(new Date(y,m-1,d), annualSchedules, schoolCalendar, getJapaneseHoliday) })()
                     : dayType
                   const activeTotalDates = selectedDates.length > 0 && !activeEditDate
-                    ? selectedDates.filter(d => !perDateOverrides[formatDate(d)]).length || 1
+                    ? selectedDates.length
                     : 1
                   const activeTotalAmount = calculateR8Total(activeInput, activeDayType)
                   return (

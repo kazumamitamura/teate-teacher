@@ -420,6 +420,24 @@ export function isDormOnlySelection(state: AllowanceInputState): boolean {
   )
 }
 
+/**
+ * 複数日入力の保存用に、個別設定日の入力を共通設定の宿泊泊数とマージする。
+ * 中間日だけ業務内容を変えても、連泊の宿泊手当は選択日数全体で判定する。
+ */
+export function buildInputForMultiDateSave(
+  common: AllowanceInputState,
+  dateInput: AllowanceInputState,
+  isOverride: boolean,
+): AllowanceInputState {
+  if (!isOverride) return dateInput
+  return {
+    ...dateInput,
+    accommodationNights: common.accommodationNights,
+    accommodationEnabled: dateInput.accommodationEnabled || common.accommodationEnabled,
+    accommodationType: dateInput.accommodationType || common.accommodationType,
+  }
+}
+
 /** 行き先（地域）の選択が必須かどうか */
 export function isRegionRequired(state: AllowanceInputState): boolean {
   if (isDormOnlySelection(state)) return false
