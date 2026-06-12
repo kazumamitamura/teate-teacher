@@ -5,7 +5,7 @@
 export const REGION_OPTIONS = [
   { id: 'shonai_mogami', label: '庄内・最上' },
   { id: 'murayama_oki', label: '村山・置賜' },
-  { id: 'other_pref', label: '他県' },
+  { id: 'other_pref', label: '東北' },
   { id: 'hokkaido', label: '北海道地方' },
   { id: 'kinki', label: '近畿地方' },
   { id: 'chugoku', label: '中国地方' },
@@ -149,6 +149,12 @@ export function isWorkDayFromDayType(dayType: string): boolean {
 
 export function getRegionLabel(regionId: string): string {
   return REGION_OPTIONS.find((r) => r.id === regionId)?.label ?? ''
+}
+
+/** 保存済みデータの行き先ラベル → regionId（旧ラベル「他県」も東北として扱う） */
+export function getRegionIdFromLabel(label: string): string {
+  if (label === '他県') return 'other_pref'
+  return REGION_OPTIONS.find((r) => r.label === label)?.id ?? ''
 }
 
 function getSubOption(businessType: BusinessTypeId, subOptionId: string) {
@@ -325,8 +331,7 @@ export function parseStoredAllowance(allowance: {
   if (metaMatch) {
     try {
       const meta = JSON.parse(metaMatch[1]) as Partial<AllowanceInputState> & { v?: number }
-      const region =
-        REGION_OPTIONS.find((r) => r.label === (allowance.destination_type ?? ''))?.id ?? ''
+      const region = getRegionIdFromLabel(allowance.destination_type ?? '')
       return {
         regionId: region,
         businessType: (meta.businessType as BusinessTypeId) ?? '',
@@ -356,7 +361,7 @@ function parseLegacyAllowance(allowance: {
   const act = allowance.activity_type ?? ''
   const destLabel = allowance.destination_type ?? ''
   const region =
-    REGION_OPTIONS.find((r) => r.label === destLabel)?.id ??
+    getRegionIdFromLabel(destLabel) ||
     (destLabel.includes('県外')
       ? 'other_pref'
       : destLabel.includes('120') || destLabel.includes('県内')
