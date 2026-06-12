@@ -376,8 +376,14 @@ export default function AdminDashboard() {
               {uploading ? '処理中...' : 'アップロード'}
             </button>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <p className="text-sm text-gray-600 mb-2">登録済みの年間勤務表データを取り下げる場合</p>
+          <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push('/admin/schedules')}
+              className="px-4 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition"
+            >
+              ✏️ 登録データを編集
+            </button>
             <button
               type="button"
               onClick={handleClearAnnualSchedules}
@@ -386,6 +392,9 @@ export default function AdminDashboard() {
             >
               {clearingSchedules ? '取り消し中...' : '登録データを取り消す'}
             </button>
+            <p className="text-sm text-gray-500 w-full sm:w-auto">
+              代休などの微調整は「登録データを編集」から行えます
+            </p>
           </div>
         </div>
 
