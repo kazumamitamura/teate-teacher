@@ -48,23 +48,24 @@ export default function AdminDashboard() {
       // 日付形式を変換する関数（YYYY/MM/DD → YYYY-MM-DD）
       const normalizeDate = (dateStr: string): string | null => {
         if (!dateStr) return null
-        
-        // YYYY-MM-DD形式の場合はそのまま
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          return dateStr
-        }
-        
-        // YYYY/MM/DD形式の場合は変換
-        if (dateStr.match(/^\d{4}\/\d{2}\/\d{2}$/)) {
-          return dateStr.replace(/\//g, '-')
-        }
-        
-        // MM/DD/YYYY形式の場合も対応
-        const slashMatch = dateStr.match(/^(\d{4})\/(\d{2})\/(\d{2})$/)
-        if (slashMatch) {
-          return `${slashMatch[1]}-${slashMatch[2]}-${slashMatch[3]}`
-        }
-        
+
+        const pad = (y: string, m: string, d: string) =>
+          `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+
+        // YYYY-MM-DD
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return dateStr
+
+        // YYYY/MM/DD
+        if (dateStr.match(/^\d{4}\/\d{2}\/\d{2}$/)) return dateStr.replace(/\//g, '-')
+
+        // YYYY-M-D / YYYY-MM-D など（ゼロ埋めなし）
+        const dashMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+        if (dashMatch) return pad(dashMatch[1], dashMatch[2], dashMatch[3])
+
+        // YYYY/M/D など（ゼロ埋めなし）
+        const slashMatch = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/)
+        if (slashMatch) return pad(slashMatch[1], slashMatch[2], slashMatch[3])
+
         return null
       }
       

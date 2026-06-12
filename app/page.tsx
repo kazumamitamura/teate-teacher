@@ -16,6 +16,7 @@ import {
   validateAllowanceInput,
   type AllowanceInputState,
 } from '@/utils/allowanceSpecR8'
+import { fetchAllAnnualSchedules } from '@/utils/annualSchedule'
 import { fetchCurrentProfile, isAdminRole } from '@/utils/userProfile'
 import { logout } from './auth/actions'
 
@@ -593,12 +594,12 @@ export default function Home() {
 
   const fetchAnnualSchedules = async () => {
     try {
-      const { data, error } = await supabase.from('annual_schedules').select('*')
+      const { data, error } = await fetchAllAnnualSchedules(supabase)
       if (error) {
-        logSupabaseError('年間予定取得', error)
+        logSupabaseError('年間予定取得', { message: error })
         setAnnualSchedules([])
       } else {
-        setAnnualSchedules(data || [])
+        setAnnualSchedules(data)
       }
     } catch (err) {
       console.error('年間予定取得中の予期しないエラー:', err)

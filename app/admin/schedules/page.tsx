@@ -5,11 +5,16 @@ import Link from 'next/link'
 import { useRequireAdmin } from '@/utils/useRequireAdmin'
 import {
   WORK_TYPE_OPTIONS,
+  fetchAllAnnualSchedules,
+  formatFiscalYearLabel,
   formatMonthLabel,
   formatScheduleDate,
+  getDateRangeLabel,
+  getFiscalYear,
   getMonthKey,
   getScheduleRowClass,
   getWorkTypeBadgeClass,
+  isInFiscalYear,
   type AnnualScheduleRow,
 } from '@/utils/annualSchedule'
 
@@ -21,26 +26,21 @@ export default function AdminSchedulesPage() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [monthFilter, setMonthFilter] = useState('all')
+  const [fiscalYearFilter, setFiscalYearFilter] = useState('all')
+  const [dbTotalCount, setDbTotalCount] = useState<number | null>(null)
 
   const fetchSchedules = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('annual_schedules')
-      .select('id, date, work_type, event_name')
-      .order('date', { ascending: true })
+    const { data, totalCount, error } = await fetchAllAnnualSchedules(supabase)
 
     if (error) {
       console.error('勤務表取得エラー:', error)
-      alert('勤務表データの取得に失敗しました: ' + error.message)
+      alert('勤務表データの取得に失敗しました: ' + error)
       setRows([])
+      setDbTotalCount(null)
     } else {
-      const list = (data ?? []).map((r) => ({
-        id: r.id,
-        date: String(r.date),
-        work_type: r.work_type ?? '',
-        event_name: r.event_name ?? '',
-      }))
-      setRows(list)
+      setRows(data)
+      setDbTotalCount(totalCount)
     }
     setLoading(false)
   }, [supabase])
@@ -49,10 +49,19 @@ export default function AdminSchedulesPage() {
     if (authorized) fetchSchedules()
   }, [authorized, fetchSchedules])
 
-  const monthOptions = useMemo(() => {
-    const keys = [...new Set(rows.map((r) => getMonthKey(r.date)))]
-    return keys.sort()
+  const fiscalYearOptions = useMemo(() => {
+    const years = [...new Set(rows.map((r) => getFiscalYear(r.date)))]
+    return years.sort((a, b) => b - a)
   }, [rows])
+
+  const monthOptions = useMemo(() => {
+    const source =
+      fiscalYearFilter === 'all'
+        ? rows
+        : rows.filter((r) => isInFiscalYear(r.date, Number(fiscalYearFilter)))
+    const keys = [...new Set(source.map((r) => getMonthKey(r.date)))]
+    return keys.sort()
+  }, [rows, fiscalYearFilter])
 
   const workTypeOptions = useMemo(() => {
     const extras = rows
@@ -62,10 +71,18 @@ export default function AdminSchedulesPage() {
   }, [rows])
 
   const displayedRows = useMemo(() => {
-    const source = editing ? draft : rows
-    if (monthFilter === 'all') return source
-    return source.filter((r) => getMonthKey(r.date) === monthFilter)
-  }, [editing, draft, rows, monthFilter])
+    let source = editing ? draft : rows
+    if (fiscalYearFilter !== 'all') {
+      const fy = Number(fiscalYearFilter)
+      source = source.filter((r) => isInFiscalYear(r.date, fy))
+    }
+    if (monthFilter !== 'all') {
+      source = source.filter((r) => getMonthKey(r.date) === monthFilter)
+    }
+    return source
+  }, [editing, draft, rows, monthFilter, fiscalYearFilter])
+
+  const fetchIncomplete = dbTotalCount != null && rows.length < dbTotalCount
 
   const changedCount = useMemo(() => {
     if (!editing) return 0
@@ -166,10 +183,19 @@ export default function AdminSchedulesPage() {
             <div>
               <p className="text-sm text-gray-600">
                 登録件数: <span className="font-bold text-gray-900">{rows.length}件</span>
+                {dbTotalCount != null && dbTotalCount !== rows.length && (
+                  <span className="ml-2 text-red-600 font-bold">（DB全件: {dbTotalCount}件）</span>
+                )}
+                <span className="ml-2 text-gray-500">期間: {getDateRangeLabel(rows)}</span>
                 {editing && changedCount > 0 && (
                   <span className="ml-3 text-amber-700 font-bold">（未保存の変更: {changedCount}件）</span>
                 )}
               </p>
+              {fetchIncomplete && (
+                <p className="mt-1 text-xs text-red-600 font-bold">
+                  ⚠️ データの一部しか取得できていません。ページを再読み込みしてください。
+                </p>
+              )}
               <div className="flex flex-wrap gap-3 mt-2 text-xs">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-4 h-4 rounded border border-slate-200 bg-white" />
@@ -183,6 +209,24 @@ export default function AdminSchedulesPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              <label className="text-sm font-bold text-gray-700">
+                年度:
+                <select
+                  value={fiscalYearFilter}
+                  onChange={(e) => {
+                    setFiscalYearFilter(e.target.value)
+                    setMonthFilter('all')
+                  }}
+                  className="ml-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold text-gray-900 bg-white"
+                >
+                  <option value="all">すべて</option>
+                  {fiscalYearOptions.map((fy) => (
+                    <option key={fy} value={String(fy)}>
+                      {formatFiscalYearLabel(fy)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="text-sm font-bold text-gray-700">
                 表示月:
                 <select
