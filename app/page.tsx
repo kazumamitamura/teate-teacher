@@ -1089,9 +1089,9 @@ export default function Home() {
                 </div>
             )}
             
-            {/* 勤務区分（右上に小さく表示） */}
-            {schedule && schedule.work_type && (
-                <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-purple-100 border border-purple-300 rounded text-xs font-bold text-purple-700">
+            {/* 勤務区分（休日のみ右上に表示） */}
+            {schedule && isHolidayWorkType(schedule.work_type) && (
+                <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-red-50 border border-red-200 rounded text-xs font-bold text-red-700">
                     {schedule.work_type}
                 </div>
             )}
