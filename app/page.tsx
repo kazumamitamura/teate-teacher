@@ -53,6 +53,11 @@ const formatDate = (date: Date) => {
  * 日付から勤務区分文字列を導出するヘルパー。
  * performSave での複数日ループでも同じロジックを使う。
  */
+/** 入力画面に勤務区分バッジを表示するか（休日のみ） */
+function shouldShowHolidayBadge(dayType: string): boolean {
+  return dayType.includes('休日') || dayType.includes('週休')
+}
+
 function getDayTypeForDate(
   date: Date,
   annualSchedules: { date: string; work_type: string; event_name: string }[],
@@ -1431,9 +1436,11 @@ export default function Home() {
                     <h2 className="font-bold text-gray-900 text-base sm:text-lg">{selectedDate.getMonth() + 1}月{selectedDate.getDate()}日 ({['日', '月', '火', '水', '木', '金', '土'][selectedDate.getDay()]}) の手当入力</h2>
                     <div className="flex gap-2 mt-2">
                       {isAllowLocked && <span className="text-xs px-2 py-1 rounded font-bold bg-gray-100 text-gray-500">💰 編集不可</span>}
-                      <span className={`text-xs px-2 py-1 rounded font-bold ${dayType.includes('休日') || dayType.includes('週休') ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
-                        {dayType}
-                      </span>
+                      {shouldShowHolidayBadge(dayType) && (
+                        <span className="text-xs px-2 py-1 rounded font-bold bg-red-100 text-red-600">
+                          {dayType}
+                        </span>
+                      )}
                     </div>
                   </>
               )}
@@ -1447,12 +1454,12 @@ export default function Home() {
               {selectedDates.length > 0 && activeEditDate && (() => {
                 const [y,m,d] = activeEditDate.split('-').map(Number)
                 const dt = getDayTypeForDate(new Date(y, m-1, d), annualSchedules, schoolCalendar, getJapaneseHoliday)
+                if (!shouldShowHolidayBadge(dt)) return null
                 return (
                   <div className="mb-3 flex items-center gap-2">
-                    <span className={`text-xs px-2 py-1 rounded font-bold ${dt.includes('休日') ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                    <span className="text-xs px-2 py-1 rounded font-bold bg-red-100 text-red-600">
                       {dt}
                     </span>
-                    <span className="text-xs text-slate-500">（この日の勤務区分）</span>
                   </div>
                 )
               })()}
