@@ -13,6 +13,7 @@ import {
   getFiscalYear,
   getMonthKey,
   getScheduleRowClass,
+  getWeekdayTextClass,
   getWorkTypeBadgeClass,
   isInFiscalYear,
   type AnnualScheduleRow,
@@ -199,13 +200,20 @@ export default function AdminSchedulesPage() {
               <div className="flex flex-wrap gap-3 mt-2 text-xs">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-4 h-4 rounded border border-slate-200 bg-white" />
-                  勤務日（A/B/C）
+                  勤務日
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-4 h-4 rounded border border-red-200 bg-red-50" />
-                  休日（休/祝）
+                  休日
                 </span>
+                <span className="text-blue-600 font-bold">土=青</span>
+                <span className="text-red-500 font-bold">日=赤</span>
               </div>
+              {rows.length > 0 && rows.length < 300 && (
+                <p className="mt-2 text-xs text-amber-700 font-bold">
+                  ⚠️ 登録件数が少ないです。管理者画面からCSVを再アップロードすると全年度分が登録されます。
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -307,8 +315,6 @@ export default function AdminSchedulesPage() {
                       editing &&
                       orig &&
                       (orig.work_type !== row.work_type || orig.event_name !== row.event_name)
-                    const isWeekend = weekday === '土' || weekday === '日'
-
                     return (
                       <tr
                         key={row.date}
@@ -317,11 +323,7 @@ export default function AdminSchedulesPage() {
                         }`}
                       >
                         <td className="px-4 py-2.5 font-mono font-bold text-gray-900">{label}</td>
-                        <td
-                          className={`px-4 py-2.5 text-center font-bold ${
-                            isWeekend ? 'text-red-500' : 'text-gray-600'
-                          }`}
-                        >
+                        <td className={`px-4 py-2.5 text-center font-bold ${getWeekdayTextClass(weekday)}`}>
                           {weekday}
                         </td>
                         <td className="px-4 py-2.5">

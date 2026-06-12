@@ -25,11 +25,10 @@ export function downloadTeachersCsvTemplate() {
 /** 年間勤務表: 日付, 勤務区分, 行事名 */
 export const ANNUAL_SCHEDULE_CSV_FILENAME = 'annual_schedule_format.csv'
 export const ANNUAL_SCHEDULE_CSV_BODY = `日付,勤務区分,行事名
-2025-04-01,A,入学式
-2025-04-02,B,通常授業
-2025-04-29,祝,昭和の日
-2025-05-03,休,憲法記念日
-2025/06/01,A,行事名は省略可
+2026/4/1,勤務日,
+2026/4/5,休日,
+2026/4/29,休日,昭和の日
+2026/5/7,勤務日,
 `
 
 export function downloadAnnualScheduleCsvTemplate() {

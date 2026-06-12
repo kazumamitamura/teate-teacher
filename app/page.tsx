@@ -16,7 +16,7 @@ import {
   validateAllowanceInput,
   type AllowanceInputState,
 } from '@/utils/allowanceSpecR8'
-import { fetchAllAnnualSchedules } from '@/utils/annualSchedule'
+import { fetchAllAnnualSchedules, isHolidayWorkType, isWorkDayWorkType } from '@/utils/annualSchedule'
 import { fetchCurrentProfile, isAdminRole } from '@/utils/userProfile'
 import { logout } from './auth/actions'
 
@@ -67,11 +67,10 @@ function getDayTypeForDate(
   const isHoliday = holidayName !== null
 
   if (annualSchedule) {
-    const workType = annualSchedule.work_type.toUpperCase()
     let type: string
-    if (workType === 'A' || workType === 'B' || workType === 'C') {
+    if (isWorkDayWorkType(annualSchedule.work_type)) {
       type = '勤務日'
-    } else if (workType === '休' || workType === '祝') {
+    } else if (isHolidayWorkType(annualSchedule.work_type)) {
       type = '休日'
     } else {
       type = isHoliday || isWeekend ? '休日' : '勤務日'
@@ -639,15 +638,12 @@ export default function Home() {
       const isHoliday = holidayName !== null
       
       if (annualSchedule) {
-        // work_typeに基づいてday_typeを決定
-        const workType = annualSchedule.work_type.toUpperCase()
-        if (workType === 'A' || workType === 'B' || workType === 'C') {
+        if (isWorkDayWorkType(annualSchedule.work_type)) {
           type = '勤務日'
-        } else if (workType === '休' || workType === '祝') {
+        } else if (isHolidayWorkType(annualSchedule.work_type)) {
           type = '休日'
         } else {
-          // work_typeが不明な場合、祝日または週末は休日、平日は勤務日
-          type = (isHoliday || isWeekend) ? '休日' : '勤務日'
+          type = isHoliday || isWeekend ? '休日' : '勤務日'
         }
         
         // 行事名がある場合は追加

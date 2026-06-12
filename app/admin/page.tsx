@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getRoleLabel } from '@/utils/userProfile'
 import { useRequireAdmin } from '@/utils/useRequireAdmin'
+import { parseAnnualScheduleCsv, upsertAnnualSchedulesBatch } from '@/utils/annualSchedule'
 import { downloadAnnualScheduleCsvTemplate } from '@/utils/csvTemplates'
 import { logout } from '../auth/actions'
 
@@ -40,88 +41,22 @@ export default function AdminDashboard() {
     setUploading(true)
     try {
       const text = await csvFile.text()
-      const lines = text.split('\n').filter(line => line.trim())
-      
-      // ヘッダー行をスキップ
-      const dataLines = lines.slice(1)
-      
-      // 日付形式を変換する関数（YYYY/MM/DD → YYYY-MM-DD）
-      const normalizeDate = (dateStr: string): string | null => {
-        if (!dateStr) return null
-
-        const pad = (y: string, m: string, d: string) =>
-          `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
-
-        // YYYY-MM-DD
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return dateStr
-
-        // YYYY/MM/DD
-        if (dateStr.match(/^\d{4}\/\d{2}\/\d{2}$/)) return dateStr.replace(/\//g, '-')
-
-        // YYYY-M-D / YYYY-MM-D など（ゼロ埋めなし）
-        const dashMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
-        if (dashMatch) return pad(dashMatch[1], dashMatch[2], dashMatch[3])
-
-        // YYYY/M/D など（ゼロ埋めなし）
-        const slashMatch = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/)
-        if (slashMatch) return pad(slashMatch[1], slashMatch[2], slashMatch[3])
-
-        return null
-      }
-      
-      const records = dataLines.map(line => {
-        // CSVのパース（カンマ区切り、ダブルクォート対応）
-        const parts: string[] = []
-        let current = ''
-        let inQuotes = false
-        
-        for (let i = 0; i < line.length; i++) {
-          const char = line[i]
-          if (char === '"') {
-            inQuotes = !inQuotes
-          } else if (char === ',' && !inQuotes) {
-            parts.push(current.trim())
-            current = ''
-          } else {
-            current += char
-          }
-        }
-        parts.push(current.trim())
-        
-        const [date, workType, eventName] = parts.map(v => v.replace(/^"|"$/g, '').trim())
-        
-        // 日付の形式を変換・確認
-        const normalizedDate = normalizeDate(date)
-        if (!normalizedDate) {
-          console.warn('無効な日付形式:', date)
-          return null
-        }
-        
-        // 勤務区分が空の場合はスキップ
-        if (!workType || workType.trim() === '') {
-          console.warn('勤務区分が空:', date)
-          return null
-        }
-        
-        return {
-          date: normalizedDate,
-          work_type: workType.trim(),
-          event_name: (eventName || '').trim()
-        }
-      }).filter((r): r is { date: string; work_type: string; event_name: string } => r !== null) // nullを除外
+      const { records, skipped } = parseAnnualScheduleCsv(text)
 
       if (records.length === 0) {
-        alert('有効なデータが見つかりませんでした。\n\nCSV形式: 日付,勤務区分,行事名\n例: 2025-04-01,A,入学式\nまたは: 2025/04/01,A,入学式\n\n※行事名は省略可能です')
+        const skipHint = skipped.length > 0
+          ? `\n\nスキップされた行: ${skipped.length}件\n例: ${skipped.slice(0, 3).map((s) => `${s.line}行目(${s.reason})`).join(', ')}`
+          : ''
+        alert(
+          '有効なデータが見つかりませんでした。\n\nCSV形式: 日付,勤務区分,行事名\n例: 2026/4/1,勤務日,\nまたは: 2026-04-01,休日,憲法記念日\n\n※行事名は省略可能です' + skipHint,
+        )
         setUploading(false)
         return
       }
 
       console.log('アップロードするデータ:', records.slice(0, 5), '... (合計', records.length, '件)')
 
-      // Supabaseにupsert
-      const { error } = await supabase
-        .from('annual_schedules')
-        .upsert(records, { onConflict: 'date' })
+      const { error, upserted } = await upsertAnnualSchedulesBatch(supabase, records)
 
       if (error) {
         console.error('CSVアップロードエラー（詳細）:', {
@@ -140,9 +75,14 @@ export default function AdminDashboard() {
           errorMessage += '\n\nannual_schedulesテーブルが作成されていません。\n\n【解決方法】\n1. Supabase Dashboard の SQL Editor を開く\n2. CREATE_ANNUAL_SCHEDULES_TABLE.sql の内容をコピー\n3. SQL Editor に貼り付けて実行'
         }
         
-        alert(errorMessage)
+        alert(errorMessage + (upserted > 0 ? `\n\n${upserted}件まで登録済みです。` : ''))
       } else {
-        alert(`✅ ${records.length}件の勤務表データを登録しました！\n\nカレンダーに反映されます。`)
+        const skipMsg = skipped.length > 0
+          ? `\n\n⚠️ スキップ: ${skipped.length}行（日付形式などを確認してください）`
+          : ''
+        const first = records[0].date
+        const last = records[records.length - 1].date
+        alert(`✅ ${upserted}件の勤務表データを登録しました！\n期間: ${first} 〜 ${last}${skipMsg}\n\nカレンダーに反映されます。`)
         setCsvFile(null)
         // ファイル入力をリセット
         const fileInput = document.getElementById('csv-file-input') as HTMLInputElement
@@ -342,14 +282,15 @@ export default function AdminDashboard() {
             <h4 className="text-sm font-bold text-gray-900 mb-2">CSVフォーマット例</h4>
             <pre className="text-xs text-gray-900 bg-white p-3 rounded border border-gray-300 overflow-x-auto">
 日付,勤務区分,行事名
-2025-04-01,A,入学式
-2025-04-02,B,通常授業
-2025-04-29,祝,昭和の日
-2025-05-03,休,憲法記念日
+2026/4/1,勤務日,
+2026/4/5,休日,
+2026/4/29,休日,昭和の日
+2026/5/7,勤務日,
             </pre>
             <p className="mt-2 text-xs text-gray-600">
-              ※ 日付は <span className="font-mono">YYYY-MM-DD</span> または{' '}
-              <span className="font-mono">YYYY/MM/DD</span>。1行目はヘッダー行のままにしてください。行事名は空欄でも構いません。
+              ※ 勤務区分は <span className="font-mono">勤務日</span> /{' '}
+              <span className="font-mono">休日</span> または <span className="font-mono">A/B/C/休/祝</span>。
+              日付は <span className="font-mono">2026/4/1</span> 形式でも可。1行目はヘッダー行のままにしてください。
             </p>
           </div>
 
