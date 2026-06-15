@@ -3,10 +3,11 @@
  */
 
 export const REGION_OPTIONS = [
-  { id: 'under120_shonai_mogami', label: '120km未満（庄内・最上）' },
+  { id: 'under120_shonai_mogami', label: '庄内・最上' },
   { id: 'under120_murayama_oki', label: '120㎞未満（村山・置賜含む）' },
   { id: 'km120_500', label: '120㎞～500㎞未満' },
   { id: 'over500', label: '500㎞以上' },
+  { id: 'overseas', label: '海外' },
 ] as const
 
 export const BUSINESS_TYPES = [
@@ -148,6 +149,7 @@ export function getRegionLabel(regionId: string): string {
 
 /** 保存済みデータの行き先ラベル → regionId（旧ラベルも読み込み可能） */
 const REGION_LABEL_ALIASES: Record<string, string> = {
+  '120km未満（庄内・最上）': 'under120_shonai_mogami',
   '庄内・最上': 'under120_shonai_mogami',
   '村山・置賜': 'under120_murayama_oki',
   '他県': 'km120_500',
@@ -157,7 +159,7 @@ const REGION_LABEL_ALIASES: Record<string, string> = {
   '中国地方': 'over500',
   '四国地方': 'over500',
   '九州・沖縄地方': 'over500',
-  '海外': 'over500',
+  '海外': 'overseas',
 }
 
 export function getRegionIdFromLabel(label: string): string {
@@ -378,7 +380,9 @@ function parseLegacyAllowance(allowance: {
           ? 'under120_murayama_oki'
           : destLabel.includes('庄内') || destLabel.includes('最上')
             ? 'under120_shonai_mogami'
-            : destLabel.includes('県外')
+            : destLabel.includes('海外')
+              ? 'overseas'
+              : destLabel.includes('県外')
               ? 'km120_500'
               : 'under120_shonai_mogami')
 

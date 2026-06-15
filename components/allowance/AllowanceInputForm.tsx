@@ -187,21 +187,33 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           color="blue"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {REGION_OPTIONS.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                disabled={isLocked}
-                onClick={() => patch({ regionId: r.id })}
-                className={`rounded-xl px-3 py-3 text-xs sm:text-sm font-bold transition touch-manipulation border-2 text-left ${
-                  value.regionId === r.id
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                    : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300'
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
+            {REGION_OPTIONS.map((r) => {
+              const isOverseas = r.id === 'overseas'
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  disabled={isLocked}
+                  onClick={() => {
+                    patch({ regionId: r.id })
+                    if (isOverseas && value.businessType === 'TRAINING' && !value.trainingSubType) {
+                      patch({ regionId: r.id, trainingSubType: 'overseas' })
+                    }
+                  }}
+                  className={`rounded-xl px-3 py-3 text-xs sm:text-sm font-bold transition touch-manipulation border-2 text-left ${
+                    value.regionId === r.id
+                      ? isOverseas
+                        ? 'bg-violet-600 text-white border-violet-600 shadow-md'
+                        : 'bg-blue-600 text-white border-blue-600 shadow-md'
+                      : isOverseas
+                        ? 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
+                        : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300'
+                  }`}
+                >
+                  {isOverseas ? `🌏 ${r.label}` : r.label}
+                </button>
+              )
+            })}
           </div>
           {!value.regionId && isRegionRequired(value) && (
             <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700">
@@ -255,6 +267,11 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           color="indigo"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {value.regionId === 'overseas' && value.trainingSubType === 'overseas' && (
+              <div className="sm:col-span-2 mb-1 rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-xs font-bold text-violet-800">
+                🌏 行き先「海外」に合わせて「海外引率」を自動選択しました（変更可能）
+              </div>
+            )}
             {TRAINING_SUB_OPTIONS.map((opt) => (
               <ChoiceCard
                 key={opt.id}
