@@ -183,38 +183,25 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
         <Section
           step={stepIndex++}
           title="行き先（地域）"
-          hint="必須：会計処理に必要です。当てはまる地域を1つ選んでください。"
+          hint="必須：走行距離に応じた区分を1つ選んでください。"
           color="blue"
         >
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {REGION_OPTIONS.map((r) => {
-              const isOverseas = r.id === 'overseas'
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  disabled={isLocked}
-                  onClick={() => {
-                    patch({ regionId: r.id })
-                    // 海外を選んで研修旅行等引率手当なら自動で海外引率を提案
-                    if (isOverseas && value.businessType === 'TRAINING' && !value.trainingSubType) {
-                      patch({ regionId: r.id, trainingSubType: 'overseas' })
-                    }
-                  }}
-                  className={`rounded-xl px-2 py-3 text-xs sm:text-sm font-bold transition touch-manipulation border-2 ${
-                    value.regionId === r.id
-                      ? isOverseas
-                        ? 'bg-violet-600 text-white border-violet-600 shadow-md'
-                        : 'bg-blue-600 text-white border-blue-600 shadow-md'
-                      : isOverseas
-                        ? 'bg-white border-violet-300 text-violet-700 hover:bg-violet-50'
-                        : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300'
-                  }`}
-                >
-                  {isOverseas ? `🌏 ${r.label}` : r.label}
-                </button>
-              )
-            })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {REGION_OPTIONS.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                disabled={isLocked}
+                onClick={() => patch({ regionId: r.id })}
+                className={`rounded-xl px-3 py-3 text-xs sm:text-sm font-bold transition touch-manipulation border-2 text-left ${
+                  value.regionId === r.id
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                    : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
           </div>
           {!value.regionId && isRegionRequired(value) && (
             <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700">
@@ -267,12 +254,6 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           hint="国内・海外で支給額が異なります。1つ選んでください（必須）"
           color="indigo"
         >
-          {/* 海外が自動選択されたときのヒント */}
-          {value.regionId === 'overseas' && value.trainingSubType === 'overseas' && (
-            <div className="mb-3 rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 text-xs font-bold text-violet-800">
-              🌏 行き先「海外」に合わせて「海外引率」を自動選択しました（変更可能）
-            </div>
-          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {TRAINING_SUB_OPTIONS.map((opt) => (
               <ChoiceCard

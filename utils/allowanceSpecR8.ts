@@ -3,15 +3,10 @@
  */
 
 export const REGION_OPTIONS = [
-  { id: 'shonai_mogami', label: '庄内・最上' },
-  { id: 'murayama_oki', label: '村山・置賜' },
-  { id: 'other_pref', label: '東北' },
-  { id: 'hokkaido', label: '北海道地方' },
-  { id: 'kinki', label: '近畿地方' },
-  { id: 'chugoku', label: '中国地方' },
-  { id: 'shikoku', label: '四国地方' },
-  { id: 'kyushu_okinawa', label: '九州・沖縄地方' },
-  { id: 'overseas', label: '海外' },
+  { id: 'under120_shonai_mogami', label: '120km未満（庄内・最上）' },
+  { id: 'under120_murayama_oki', label: '120㎞未満（村山・置賜含む）' },
+  { id: 'km120_500', label: '120㎞～500㎞未満' },
+  { id: 'over500', label: '500㎞以上' },
 ] as const
 
 export const BUSINESS_TYPES = [
@@ -151,9 +146,22 @@ export function getRegionLabel(regionId: string): string {
   return REGION_OPTIONS.find((r) => r.id === regionId)?.label ?? ''
 }
 
-/** 保存済みデータの行き先ラベル → regionId（旧ラベル「他県」も東北として扱う） */
+/** 保存済みデータの行き先ラベル → regionId（旧ラベルも読み込み可能） */
+const REGION_LABEL_ALIASES: Record<string, string> = {
+  '庄内・最上': 'under120_shonai_mogami',
+  '村山・置賜': 'under120_murayama_oki',
+  '他県': 'km120_500',
+  '東北': 'km120_500',
+  '北海道地方': 'over500',
+  '近畿地方': 'over500',
+  '中国地方': 'over500',
+  '四国地方': 'over500',
+  '九州・沖縄地方': 'over500',
+  '海外': 'over500',
+}
+
 export function getRegionIdFromLabel(label: string): string {
-  if (label === '他県') return 'other_pref'
+  if (REGION_LABEL_ALIASES[label]) return REGION_LABEL_ALIASES[label]
   return REGION_OPTIONS.find((r) => r.label === label)?.id ?? ''
 }
 
@@ -362,11 +370,17 @@ function parseLegacyAllowance(allowance: {
   const destLabel = allowance.destination_type ?? ''
   const region =
     getRegionIdFromLabel(destLabel) ||
-    (destLabel.includes('県外')
-      ? 'other_pref'
-      : destLabel.includes('120') || destLabel.includes('県内')
-        ? 'murayama_oki'
-        : 'shonai_mogami')
+    (destLabel.includes('500') && destLabel.includes('以上')
+      ? 'over500'
+      : destLabel.includes('120') && destLabel.includes('500')
+        ? 'km120_500'
+        : destLabel.includes('村山') || destLabel.includes('置賜') || destLabel.includes('県内')
+          ? 'under120_murayama_oki'
+          : destLabel.includes('庄内') || destLabel.includes('最上')
+            ? 'under120_shonai_mogami'
+            : destLabel.includes('県外')
+              ? 'km120_500'
+              : 'under120_shonai_mogami')
 
   let businessType: BusinessTypeId = ''
   let trainingSubType: TrainingSubType = ''
