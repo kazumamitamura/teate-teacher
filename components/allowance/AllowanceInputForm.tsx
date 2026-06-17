@@ -263,7 +263,7 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
         <Section
           step={stepIndex++}
           title="引率区分"
-          hint="国内・海外で支給額が異なります。1つ選んでください（必須）"
+          hint="国内・海外・半日で支給額が異なります。1つ選んでください（必須）"
           color="indigo"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -287,7 +287,7 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           </div>
           {!value.trainingSubType && (
             <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700">
-              ⚠️ 国内・海外のどちらかを選んでください（必須）
+              ⚠️ 国内引率・海外引率・半日のいずれかを選んでください（必須）
             </p>
           )}
         </Section>

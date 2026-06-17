@@ -66,9 +66,15 @@ export const TRAINING_SUB_OPTIONS = [
     description: '海外への修学旅行・研修旅行',
     amount: 4700,
   },
+  {
+    id: 'half',
+    label: '半日',
+    description: '半日程度の引率',
+    amount: 1700,
+  },
 ] as const
 
-export type TrainingSubType = '' | 'domestic' | 'overseas'
+export type TrainingSubType = '' | 'domestic' | 'overseas' | 'half'
 
 export const SPORTS_SUB_OPTIONS = [
   { id: 'sports_full', label: '1日（庄内・新庄・最上の運転を含む）', amount: 3400, isDriving: false },
@@ -397,7 +403,7 @@ function parseLegacyAllowance(allowance: {
 
   if (act.includes('研修') || act.includes('G:')) {
     businessType = 'TRAINING'
-    trainingSubType = act.includes('海外') ? 'overseas' : 'domestic'
+    trainingSubType = act.includes('半日') ? 'half' : act.includes('海外') ? 'overseas' : 'domestic'
   } else if (act.includes('出張')) {
     businessType = 'TRIP'
   } else if (act.includes('災害')) {
@@ -495,7 +501,7 @@ export function validateAllowanceInput(
   }
 
   if (state.businessType === 'TRAINING' && !state.trainingSubType) {
-    return { ok: false, message: '国内引率・海外引率のどちらかを選んでください。' }
+    return { ok: false, message: '国内引率・海外引率・半日のいずれかを選んでください。' }
   }
 
   if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
