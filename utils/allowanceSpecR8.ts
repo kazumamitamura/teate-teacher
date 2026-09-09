@@ -149,6 +149,11 @@ export function isWorkDayFromDayType(dayType: string): boolean {
   return dayType.includes('勤務日') || dayType.includes('授業')
 }
 
+/** 部活動指導手当：勤務日に選択不可の業務内容（1日・半日） */
+export function isClubNonDrivingSubOption(subOptionId: string): boolean {
+  return subOptionId === 'club_full' || subOptionId === 'club_half'
+}
+
 export function getRegionLabel(regionId: string): string {
   return REGION_OPTIONS.find((r) => r.id === regionId)?.label ?? ''
 }
@@ -526,10 +531,10 @@ export function validateAllowanceInput(
     }
   }
 
-  if (state.businessType === 'CLUB' && isWorkDayFromDayType(dayType)) {
+  if (state.businessType === 'CLUB' && isWorkDayFromDayType(dayType) && isClubNonDrivingSubOption(state.subOptionId)) {
     return {
       ok: false,
-      message: '部活動指導手当は勤務日には選択できません。別の業務の種類を選んでください。',
+      message: '部活動指導手当の「1日」「半日」は勤務日には選択できません。マイクロ・大型の運転を選んでください。',
     }
   }
 

@@ -10,6 +10,7 @@ import {
   type AllowanceInputState,
   type AmountLine,
   getAmountBreakdown,
+  isClubNonDrivingSubOption,
   isDormOnlySelection,
   isRegionRequired,
   isWorkDayFromDayType,
@@ -232,7 +233,6 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
       >
         <div className="flex flex-col gap-2">
           {BUSINESS_TYPES.map((b) => {
-            const clubBlocked = b.id === 'CLUB' && isWorkDay
             let preview: number | undefined =
               'fixedAmount' in b ? (b as { id: string; fixedAmount: number }).fixedAmount : undefined
             if (b.id === 'TRIP' && isWorkDay) preview = 0
@@ -241,10 +241,10 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
               <ChoiceCard
                 key={b.id}
                 selected={value.businessType === b.id}
-                disabled={isLocked || clubBlocked}
+                disabled={isLocked}
                 onClick={() => selectBusiness(b.id)}
                 title={b.label}
-                description={clubBlocked ? '勤務日には選択できません' : b.description}
+                description={b.description}
                 amount={preview}
                 icon={b.icon}
                 accentColor="purple"
@@ -255,11 +255,6 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
         {value.businessType === 'TRIP' && isWorkDay && (
           <p className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-bold text-amber-800">
             ⚠️ この日は勤務日のため、出張手当は支給されません。
-          </p>
-        )}
-        {value.businessType === 'CLUB' && isWorkDay && (
-          <p className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-bold text-amber-800">
-            ⚠️ この日は勤務日のため、部活動指導手当は選択できません。別の業務の種類を選んでください。
           </p>
         )}
       </Section>
@@ -304,25 +299,40 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
         <Section
           step={stepIndex++}
           title="業務内容（詳細）"
-          hint="1日・半日・運転など、1つ選んでください（必須）"
+          hint={
+            value.businessType === 'CLUB' && isWorkDay
+              ? '勤務日はマイクロ・大型の運転のみ選択できます（必須）'
+              : '1日・半日・運転など、1つ選んでください（必須）'
+          }
           color="indigo"
         >
           <div className="flex flex-col gap-2">
             {subOptions.map((opt) => {
-              const amt = opt.amount
+              const clubSubBlocked =
+                value.businessType === 'CLUB' && isWorkDay && isClubNonDrivingSubOption(opt.id)
+              const amt =
+                value.businessType === 'CLUB' && isWorkDay && opt.workDayAmount != null
+                  ? opt.workDayAmount
+                  : opt.amount
               return (
                 <ChoiceCard
                   key={opt.id}
                   selected={value.subOptionId === opt.id}
-                  disabled={isLocked}
+                  disabled={isLocked || clubSubBlocked}
                   onClick={() => patch({ subOptionId: opt.id })}
                   title={opt.label}
+                  description={clubSubBlocked ? '勤務日には選択できません' : undefined}
                   amount={amt}
                   accentColor="indigo"
                 />
               )
             })}
           </div>
+          {value.businessType === 'CLUB' && isWorkDay && (
+            <p className="mt-2 text-xs text-slate-500">
+              ※ 勤務日の場合、運転手当は勤務日額（¥5,100 / ¥7,600）が適用されます。
+            </p>
+          )}
         </Section>
       )}
 
@@ -435,6 +445,7 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
           <span className="font-bold">📅 複数日モード:</span>{' '}
           勤務日・休日が混在する場合、それぞれの日付の勤務区分に応じた金額が個別に計算されます。
+          {value.businessType === 'CLUB' && ' 部活動指導手当の運転区分は勤務日のみ割引が適用されます。'}
         </div>
       )}
     </div>
