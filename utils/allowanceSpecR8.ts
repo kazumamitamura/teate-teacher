@@ -526,6 +526,13 @@ export function validateAllowanceInput(
     }
   }
 
+  if (state.businessType === 'CLUB' && isWorkDayFromDayType(dayType)) {
+    return {
+      ok: false,
+      message: '部活動指導手当は勤務日には選択できません。別の業務の種類を選んでください。',
+    }
+  }
+
   if (state.accommodationEnabled && !state.accommodationType) {
     return { ok: false, message: '宿泊業務手当の種類を選んでください。' }
   }
