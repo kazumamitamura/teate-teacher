@@ -6,6 +6,7 @@ import {
   CLUB_SUB_OPTIONS,
   REGION_OPTIONS,
   SPORTS_SUB_OPTIONS,
+  TRAINING_DRIVING_OPTIONS,
   TRAINING_SUB_OPTIONS,
   type AllowanceInputState,
   type AmountLine,
@@ -161,6 +162,7 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
       ...value,
       businessType: id,
       trainingSubType: id === 'TRAINING' ? value.trainingSubType : '',
+      trainingDrivingType: id === 'TRAINING' ? value.trainingDrivingType : '',
       subOptionId: '',
       disasterNote: id === 'DISASTER' ? value.disasterNote : '',
     })
@@ -289,6 +291,45 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           {!value.trainingSubType && (
             <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs font-bold text-red-700">
               ⚠️ 国内引率・海外引率・半日のいずれかを選んでください（必須）
+            </p>
+          )}
+        </Section>
+      )}
+
+      {/* ③-A2 研修旅行等引率手当：マイクロバス等運転オプション（任意・引率手当に加算） */}
+      {value.businessType === 'TRAINING' && value.trainingSubType && (
+        <Section
+          step={stepIndex++}
+          title="マイクロバス等の運転（任意・引率手当に加算）"
+          hint="引率に加えてマイクロバス等の運転も担当する場合は選択してください"
+          color="indigo"
+        >
+          <div className="flex flex-col gap-2">
+            {/* 運転なし */}
+            <ChoiceCard
+              selected={!value.trainingDrivingType}
+              disabled={isLocked}
+              onClick={() => patch({ trainingDrivingType: '' })}
+              title="運転なし（引率のみ）"
+              description="マイクロバス等の運転を担当しない場合"
+              accentColor="indigo"
+            />
+            {TRAINING_DRIVING_OPTIONS.map((opt) => (
+              <ChoiceCard
+                key={opt.id}
+                selected={value.trainingDrivingType === opt.id}
+                disabled={isLocked}
+                onClick={() => patch({ trainingDrivingType: opt.id })}
+                title={opt.label}
+                description={opt.description}
+                amount={opt.amount}
+                accentColor="indigo"
+              />
+            ))}
+          </div>
+          {value.trainingDrivingType && (
+            <p className="mt-2 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+              💡 引率手当 + 運転手当の合計が支給されます。宿泊がある場合はさらに宿泊業務手当が加算されます。
             </p>
           )}
         </Section>

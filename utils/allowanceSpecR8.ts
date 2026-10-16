@@ -76,6 +76,27 @@ export const TRAINING_SUB_OPTIONS = [
 
 export type TrainingSubType = '' | 'domestic' | 'overseas' | 'half'
 
+/**
+ * 研修旅行等引率手当 — マイクロバス等運転オプション（引率手当に加算）
+ * 運転しない場合は '' のまま
+ */
+export const TRAINING_DRIVING_OPTIONS = [
+  {
+    id: 'drive_mid' as const,
+    label: 'マイクロ・大型の運転（庄内・新庄・最上以遠）',
+    amount: 5100,
+    description: '引率手当に加算されます',
+  },
+  {
+    id: 'drive_out' as const,
+    label: 'マイクロ・大型の運転（県外・500km上限）',
+    amount: 7600,
+    description: '引率手当に加算されます',
+  },
+] as const
+
+export type TrainingDrivingType = '' | 'drive_mid' | 'drive_out'
+
 export const SPORTS_SUB_OPTIONS = [
   { id: 'sports_full', label: '1日（庄内・新庄・最上の運転を含む）', amount: 3400, isDriving: false },
   { id: 'sports_half', label: '半日（庄内・新庄・最上の運転を含む）', amount: 1700, isDriving: false },
@@ -114,8 +135,14 @@ export const ACCOMMODATION_TYPES = [
 export type AllowanceInputState = {
   regionId: string
   businessType: BusinessTypeId
-  /** 研修旅行等引率手当のサブ区分 */
+  /** 研修旅行等引率手当のサブ区分（国内/海外/半日） */
   trainingSubType: TrainingSubType
+  /**
+   * 研修旅行等引率手当 — マイクロバス等運転オプション
+   * 空文字 = 運転なし（引率のみ）
+   * 指定時は引率手当に加算される
+   */
+  trainingDrivingType: TrainingDrivingType
   subOptionId: string
   disasterNote: string
   accommodationEnabled: boolean
@@ -132,6 +159,7 @@ export const EMPTY_ALLOWANCE_INPUT: AllowanceInputState = {
   regionId: '',
   businessType: '',
   trainingSubType: '',
+  trainingDrivingType: '',
   subOptionId: '',
   disasterNote: '',
   accommodationEnabled: false,
@@ -189,7 +217,10 @@ export function calculateMainAmount(state: AllowanceInputState, isWorkDay: boole
 
   if (state.businessType === 'TRAINING') {
     const sub = TRAINING_SUB_OPTIONS.find((o) => o.id === state.trainingSubType)
-    return sub?.amount ?? 3400
+    const trainingAmt = sub?.amount ?? 3400
+    const drivingOpt = TRAINING_DRIVING_OPTIONS.find((o) => o.id === state.trainingDrivingType)
+    const drivingAmt = drivingOpt?.amount ?? 0
+    return trainingAmt + drivingAmt
   }
 
   if (state.businessType === 'TRIP') {
@@ -228,10 +259,16 @@ export function getAmountBreakdown(state: AllowanceInputState, dayType: string):
 
   if (state.businessType === 'TRAINING') {
     const sub = TRAINING_SUB_OPTIONS.find((o) => o.id === state.trainingSubType)
+    const trainingAmt = sub?.amount ?? 0
     const label = sub
       ? `研修旅行等引率手当（${sub.label}）`
       : '研修旅行等引率手当（国内/海外を選択してください）'
-    lines.push({ label, amount: main })
+    lines.push({ label, amount: trainingAmt })
+    // 運転手当は引率手当に加算して別行表示
+    const drivingOpt = TRAINING_DRIVING_OPTIONS.find((o) => o.id === state.trainingDrivingType)
+    if (drivingOpt) {
+      lines.push({ label: `運転手当：${drivingOpt.label}`, amount: drivingOpt.amount })
+    }
   } else if (state.businessType === 'TRIP') {
     if (isWorkDay) {
       lines.push({ label: '出張手当（勤務日のため支給なし）', amount: 0 })
@@ -269,7 +306,9 @@ export function buildActivityTypeLabel(state: AllowanceInputState): string {
 
   if (state.businessType === 'TRAINING') {
     const sub = TRAINING_SUB_OPTIONS.find((o) => o.id === state.trainingSubType)
-    return sub ? `${biz.label}（${sub.label}）` : biz.label
+    const drivingOpt = TRAINING_DRIVING_OPTIONS.find((o) => o.id === state.trainingDrivingType)
+    const base = sub ? `${biz.label}（${sub.label}）` : biz.label
+    return drivingOpt ? `${base}・${drivingOpt.label}` : base
   }
 
   if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
@@ -293,6 +332,7 @@ export function buildDestinationDetail(state: AllowanceInputState): string {
     v: 2,
     businessType: state.businessType,
     trainingSubType: state.trainingSubType,
+    trainingDrivingType: state.trainingDrivingType,
     subOptionId: state.subOptionId,
     disasterNote: state.disasterNote,
     accommodationEnabled: state.accommodationEnabled,
@@ -329,12 +369,16 @@ export function serializeForSave(
   }
   const amount = calculateR8Total(stateForCalc, dayType)
 
+  const isDriving =
+    (sub?.isDriving ?? false) ||
+    (state.businessType === 'TRAINING' && !!state.trainingDrivingType)
+
   return {
     activity_type: buildActivityTypeLabel(state),
     destination_type: getRegionLabel(state.regionId),
     destination_detail: buildDestinationDetail(state),
     amount,
-    is_driving: sub?.isDriving ?? false,
+    is_driving: isDriving,
     is_accommodation: hasAccommodationThisDay,
   }
 }
@@ -357,6 +401,7 @@ export function parseStoredAllowance(allowance: {
         regionId: region,
         businessType: (meta.businessType as BusinessTypeId) ?? '',
         trainingSubType: (meta.trainingSubType as TrainingSubType) ?? '',
+        trainingDrivingType: (meta.trainingDrivingType as TrainingDrivingType) ?? '',
         subOptionId: meta.subOptionId ?? '',
         disasterNote: meta.disasterNote ?? '',
         accommodationEnabled: !!meta.accommodationEnabled,
@@ -437,6 +482,7 @@ function parseLegacyAllowance(allowance: {
     regionId: region,
     businessType,
     trainingSubType,
+    trainingDrivingType: '' as TrainingDrivingType,
     subOptionId,
     disasterNote,
     accommodationEnabled,
