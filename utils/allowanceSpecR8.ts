@@ -588,7 +588,7 @@ export function validateAllowanceInput(
     return { ok: false, message: '宿泊業務手当の種類を選んでください。' }
   }
 
-  if (state.accommodationEnabled && state.accommodationNights > 0) {
+  if (totalDates > 1 && state.accommodationEnabled && state.accommodationNights > 0) {
     if (state.accommodationNights >= totalDates) {
       return {
         ok: false,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { handleSupabaseError, logSupabaseError } from '@/utils/supabase/errorHandler'
 import { useRouter } from 'next/navigation'
@@ -219,6 +219,23 @@ export default function Home() {
   // 月次申請ステータス
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatus>('DRAFT')
   const [submittingStatus, setSubmittingStatus] = useState(false)
+  const [savingAllowance, setSavingAllowance] = useState(false)
+  /** 保存ボタン押下時の入力エラー（ブラウザの確認ダイアログは使わない） */
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const saveErrorRef = useRef<HTMLDivElement>(null)
+  /** 保存完了後、カレンダー上に出す非ブロッキングの案内 */
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!saveNotice) return
+    const timer = window.setTimeout(() => setSaveNotice(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [saveNotice])
+
+  useEffect(() => {
+    if (!saveError) return
+    saveErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [saveError])
 
   // 管理者は常に編集可能、一般ユーザーは SUBMITTED/APPROVED 時にロック
   const isAllowLocked = (monthlyStatus === 'SUBMITTED' || monthlyStatus === 'APPROVED') && !isAdmin
@@ -691,10 +708,11 @@ export default function Home() {
   }, [allowanceInput, dayType])
 
   const performSave = async (opts?: { closeModal?: boolean; silent?: boolean }): Promise<boolean> => {
+    setSaveError(null)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       console.error('ユーザー情報が取得できません')
-      alert('ユーザー情報が取得できません。再ログインしてください。')
+      setSaveError('ユーザー情報が取得できません。再ログインしてください。')
       return false
     }
       
@@ -724,8 +742,8 @@ export default function Home() {
         const isOverride = !!perDateOverrides[dateStr]
         const dateInput = perDateOverrides[dateStr] ?? allowanceInput
         const dateDayType = getDayTypeForDate(date, annualSchedules, schoolCalendar, getJapaneseHoliday)
-        // 宿泊泊数は選択日数全体で検証（中間日の個別設定でも連泊として扱う）
-        const inputForValidation = isOverride
+        // 1日だけの保存では宿泊泊数の比較をしない（泊数指定は複数日入力専用）
+        const inputForValidation = isOverride || totalDates === 1
           ? { ...dateInput, accommodationNights: 0 }
           : allowanceInput
         const datesForValidation = isOverride ? 1 : totalDates
@@ -734,7 +752,7 @@ export default function Home() {
           const label = perDateOverrides[dateStr]
             ? `${date.getMonth() + 1}/${date.getDate()}（個別設定）`
             : '共通設定'
-          alert(`${label}:\n${validation.message}`)
+          setSaveError(`${label}:\n${validation.message}`)
           return false
         }
       }
@@ -751,7 +769,7 @@ export default function Home() {
         const inputForSave =
           totalDates > 1
             ? buildInputForMultiDateSave(allowanceInput, dateInput, isOverride)
-            : dateInput
+            : { ...dateInput, accommodationNights: 0 }
         const payload = serializeForSave(inputForSave, dateDayType, dateIdx)
 
         const insertData: Record<string, unknown> = {
@@ -857,9 +875,9 @@ export default function Home() {
               insertError.message?.includes('404') || 
               insertError.message?.includes('not found') ||
               insertError.message?.includes('Could not find the table')) {
-            alert(`${dateStr} の保存に失敗しました:\n\n${errorMessage}\n\n【重要】\nテーブル 'allowances' がSupabaseに存在しない可能性があります。\n\n【解決方法】\n1. Supabaseダッシュボード → SQL Editor を開く\n2. CREATE_ALL_TABLES.sql の内容を実行してテーブルを作成\n3. 数秒待ってからページをリロード\n4. それでも解決しない場合は、管理者にお問い合わせください\n\n※テーブル作成SQLファイルはプロジェクトのルートディレクトリにあります`)
+            setSaveError(`${dateStr} の保存に失敗しました:\n\n${errorMessage}\n\nテーブル 'allowances' がSupabaseに存在しない可能性があります。管理者にお問い合わせください。`)
           } else {
-            alert(`${dateStr} の保存に失敗しました:\n\n${errorMessage}`)
+            setSaveError(`${dateStr} の保存に失敗しました:\n\n${errorMessage}`)
           }
           return false
         }
@@ -935,14 +953,20 @@ export default function Home() {
     if (!opts?.silent) {
       const message =
         targetDates.length > 1 ? `${targetDates.length}日分のデータを保存しました` : '保存しました'
-      alert(message)
+      setSaveNotice(message)
     }
     return true
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    await performSave()
+    if (savingAllowance) return
+    setSavingAllowance(true)
+    try {
+      await performSave()
+    } finally {
+      setSavingAllowance(false)
+    }
   }
 
   const handleDelete = async (id: number, dateStr: string) => { 
@@ -968,6 +992,7 @@ export default function Home() {
     setIsMultiSelectMode(false)
     setPerDateOverrides({})
     setActiveEditDate(null)
+    setSaveError(null)
     setShowInputModal(true)
   }
 
@@ -1020,7 +1045,7 @@ export default function Home() {
     } else {
       // 単一選択モード
       setSelectedDates([]) // 複数選択をクリア
-      
+      setSaveError(null)
       setShowInputModal(true)
     }
   }
@@ -1035,6 +1060,7 @@ export default function Home() {
     // 個別設定をリセットして新規モーダルを開く
     setPerDateOverrides({})
     setActiveEditDate(null)
+    setSaveError(null)
     setShowInputModal(true)
   }
   
@@ -1202,6 +1228,14 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {saveNotice && (
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3">
+          <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl px-4 py-3 text-sm font-bold">
+            {saveNotice}
+          </div>
+        </div>
+      )}
 
       {/* 複数選択モード中の案内バー（カレンダー直上・コンパクト表示） */}
       {(isMultiSelectMode || selectedDates.length > 0) && (
@@ -1445,7 +1479,7 @@ export default function Home() {
                   </>
               )}
               </div>
-              <button onClick={() => { setShowInputModal(false); setSelectedDates([]); setIsMultiSelectMode(false); setPerDateOverrides({}); setActiveEditDate(null); }} className="text-slate-400 hover:text-slate-600 active:text-slate-800 text-3xl sm:text-2xl font-bold ml-2 touch-manipulation">×</button>
+              <button onClick={() => { setShowInputModal(false); setSelectedDates([]); setIsMultiSelectMode(false); setPerDateOverrides({}); setActiveEditDate(null); setSaveError(null); }} className="text-slate-400 hover:text-slate-600 active:text-slate-800 text-3xl sm:text-2xl font-bold ml-2 touch-manipulation">×</button>
             </div>
 
             {/* モーダルコンテンツ */}
@@ -1495,16 +1529,22 @@ export default function Home() {
                   )
                 })()}
 
+                {saveError && (
+                  <div ref={saveErrorRef} className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950 whitespace-pre-line">
+                    {saveError}
+                  </div>
+                )}
+
                 {!isAllowLocked && (
                   <div className="flex flex-col gap-2 sm:gap-3">
                     <button
                       type="submit"
-                      disabled={submittingStatus}
+                      disabled={submittingStatus || savingAllowance}
                       className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-4 sm:py-5 rounded-xl hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 shadow-xl hover:shadow-2xl text-base sm:text-lg touch-manipulation transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
                     >
                       <span className="flex items-center justify-center gap-2">
                         <span className="text-xl">💾</span>
-                        <span>この内容で保存する</span>
+                        <span>{savingAllowance ? '保存中…' : 'この内容で保存する'}</span>
                       </span>
                     </button>
                     {monthlyStatus === 'DRAFT' && (
