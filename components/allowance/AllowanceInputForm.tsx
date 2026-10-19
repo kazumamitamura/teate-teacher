@@ -15,6 +15,7 @@ import {
   isDormOnlySelection,
   isRegionRequired,
   isWorkDayFromDayType,
+  shouldOmitClubAllowanceOnWorkDay,
 } from '@/utils/allowanceSpecR8'
 
 type Props = {
@@ -157,7 +158,22 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
 
   const patch = (partial: Partial<AllowanceInputState>) => onChange({ ...value, ...partial })
 
+  const clearBusiness = () => {
+    onChange({
+      ...value,
+      businessType: '',
+      trainingSubType: '',
+      trainingDrivingType: '',
+      subOptionId: '',
+      disasterNote: '',
+    })
+  }
+
   const selectBusiness = (id: AllowanceInputState['businessType']) => {
+    if (!id || value.businessType === id) {
+      clearBusiness()
+      return
+    }
     onChange({
       ...value,
       businessType: id,
@@ -167,6 +183,12 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
       disasterNote: id === 'DISASTER' ? value.disasterNote : '',
     })
   }
+
+  const lodgingWithoutClub =
+    isWorkDay &&
+    value.accommodationEnabled &&
+    !!value.accommodationType &&
+    shouldOmitClubAllowanceOnWorkDay(value, true)
 
   type SubOpt = { id: string; label: string; amount: number; workDayAmount?: number; isDriving: boolean }
   const subOptions: SubOpt[] =
@@ -230,10 +252,18 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
       <Section
         step={stepIndex++}
         title="業務の種類"
-        hint="当てはまる業務を1つ選んでください"
+        hint="必要な場合だけ選んでください。合宿などの勤務日は、部活動指導手当を選ばずに宿泊業務手当だけ登録できます"
         color="purple"
       >
         <div className="flex flex-col gap-2">
+          <ChoiceCard
+            selected={!value.businessType}
+            disabled={isLocked}
+            onClick={clearBusiness}
+            title="選ばない（宿泊業務手当のみ）"
+            description="部活動指導手当などは付けません。下の宿泊業務手当だけ申請します"
+            accentColor="purple"
+          />
           {BUSINESS_TYPES.map((b) => {
             let preview: number | undefined =
               'fixedAmount' in b ? (b as { id: string; fixedAmount: number }).fixedAmount : undefined
@@ -342,7 +372,7 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           title="業務内容（詳細）"
           hint={
             value.businessType === 'CLUB' && isWorkDay
-              ? '勤務日はマイクロ・大型の運転のみ選択できます（必須）'
+              ? '勤務日の「1日」「半日」は支給されません。運転しない場合は「選ばない」にして、宿泊業務手当だけ登録できます'
               : '1日・半日・運転など、1つ選んでください（必須）'
           }
           color="indigo"
@@ -371,7 +401,12 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
           </div>
           {value.businessType === 'CLUB' && isWorkDay && (
             <p className="mt-2 text-xs text-slate-500">
-              ※ 勤務日の場合、運転手当は勤務日額（¥5,100 / ¥7,600）が適用されます。
+              ※ 勤務日の運転は勤務日額（¥5,100 / ¥7,600）です。運転しない合宿は、上の「選ばない」にして宿泊業務手当だけにしてください。
+            </p>
+          )}
+          {lodgingWithoutClub && (
+            <p className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-bold text-amber-800">
+              この日は勤務日のため、部活動指導手当（1日・半日）は付けずに宿泊業務手当だけ保存されます。
             </p>
           )}
         </Section>
@@ -402,7 +437,11 @@ export function AllowanceInputForm({ value, onChange, dayType, isLocked, totalAm
       <Section
         step={stepIndex++}
         title="宿泊業務手当（追加・任意）"
-        hint="日当とは別に支給されます。業務の種類がなくても宿泊業務手当だけ登録できます"
+        hint={
+          isWorkDay
+            ? '勤務日の合宿などは、部活動指導手当を選ばずに、ここだけで申請できます'
+            : '日当とは別に支給されます。業務の種類がなくても宿泊業務手当だけ登録できます'
+        }
         color="amber"
       >
         <label className="mb-3 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-amber-200 bg-white p-4 hover:bg-amber-50">

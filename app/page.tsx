@@ -772,6 +772,12 @@ export default function Home() {
             : { ...dateInput, accommodationNights: 0 }
         const payload = serializeForSave(inputForSave, dateDayType, dateIdx)
 
+        // 勤務日の部活動日当だけで、この日に残る支給がない場合は保存しない
+        if (!payload.activity_type.trim()) {
+          await supabase.from('allowances').delete().eq('user_id', user.id).eq('date', dateStr)
+          continue
+        }
+
         const insertData: Record<string, unknown> = {
           user_id: user.id,
           user_email: user.email,

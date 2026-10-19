@@ -177,9 +177,38 @@ export function isWorkDayFromDayType(dayType: string): boolean {
   return dayType.includes('勤務日') || dayType.includes('授業')
 }
 
-/** 部活動指導手当：勤務日に選択不可の業務内容（1日・半日） */
+/** 部活動指導手当：勤務日に支給しない業務内容（1日・半日） */
 export function isClubNonDrivingSubOption(subOptionId: string): boolean {
   return subOptionId === 'club_full' || subOptionId === 'club_half'
+}
+
+/**
+ * 勤務日は部活動指導手当の日当（未選択・1日・半日）を支給しない。
+ * 合宿などの勤務日は、このとき宿泊業務手当だけを残す。
+ */
+export function shouldOmitClubAllowanceOnWorkDay(
+  state: AllowanceInputState,
+  isWorkDay: boolean,
+): boolean {
+  if (!isWorkDay || state.businessType !== 'CLUB') return false
+  if (!state.subOptionId) return true
+  return isClubNonDrivingSubOption(state.subOptionId)
+}
+
+/** 保存・金額計算用。勤務日の部活動日当は外し、宿泊などは残す */
+export function withoutUnpaidClubOnWorkDay(
+  state: AllowanceInputState,
+  dayType: string,
+): AllowanceInputState {
+  if (!shouldOmitClubAllowanceOnWorkDay(state, isWorkDayFromDayType(dayType))) return state
+  return {
+    ...state,
+    businessType: '',
+    subOptionId: '',
+    trainingSubType: '',
+    trainingDrivingType: '',
+    disasterNote: '',
+  }
 }
 
 export function getRegionLabel(regionId: string): string {
@@ -214,6 +243,7 @@ function getSubOption(businessType: BusinessTypeId, subOptionId: string) {
 
 export function calculateMainAmount(state: AllowanceInputState, isWorkDay: boolean): number {
   if (!state.businessType) return 0
+  if (shouldOmitClubAllowanceOnWorkDay(state, isWorkDay)) return 0
 
   if (state.businessType === 'TRAINING') {
     const sub = TRAINING_SUB_OPTIONS.find((o) => o.id === state.trainingSubType)
@@ -278,10 +308,12 @@ export function getAmountBreakdown(state: AllowanceInputState, dayType: string):
   } else if (state.businessType === 'DISASTER') {
     lines.push({ label: '災害時等', amount: main })
   } else if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
-    const sub = getSubOption(state.businessType, state.subOptionId)
-    const biz = BUSINESS_TYPES.find((b) => b.id === state.businessType)
-    // コロン区切りで内側の括弧が二重にならないようにする
-    lines.push({ label: sub ? `${biz?.shortLabel}：${sub.label}` : biz?.label ?? '', amount: main })
+    if (!shouldOmitClubAllowanceOnWorkDay(state, isWorkDay)) {
+      const sub = getSubOption(state.businessType, state.subOptionId)
+      const biz = BUSINESS_TYPES.find((b) => b.id === state.businessType)
+      // コロン区切りで内側の括弧が二重にならないようにする
+      lines.push({ label: sub ? `${biz?.shortLabel}：${sub.label}` : biz?.label ?? '', amount: main })
+    }
   }
 
   if (state.accommodationEnabled && state.accommodationType) {
@@ -353,30 +385,30 @@ export function serializeForSave(
   dayType: string,
   multiDateIndex = 0,
 ) {
-  const isWorkDay = isWorkDayFromDayType(dayType)
-  const sub = getSubOption(state.businessType, state.subOptionId)
+  const persisted = withoutUnpaidClubOnWorkDay(state, dayType)
+  const sub = getSubOption(persisted.businessType, persisted.subOptionId)
 
   // 宿泊判定: 泊数が設定されていれば日付インデックスで判定、なければ enabled フラグ通り
-  const nights = state.accommodationNights
+  const nights = persisted.accommodationNights
   const hasAccommodationThisDay =
-    state.accommodationEnabled &&
-    !!state.accommodationType &&
+    persisted.accommodationEnabled &&
+    !!persisted.accommodationType &&
     (nights <= 0 ? true : multiDateIndex < nights)
 
   const stateForCalc: AllowanceInputState = {
-    ...state,
+    ...persisted,
     accommodationEnabled: hasAccommodationThisDay,
   }
   const amount = calculateR8Total(stateForCalc, dayType)
 
   const isDriving =
     (sub?.isDriving ?? false) ||
-    (state.businessType === 'TRAINING' && !!state.trainingDrivingType)
+    (persisted.businessType === 'TRAINING' && !!persisted.trainingDrivingType)
 
   return {
-    activity_type: buildActivityTypeLabel(state),
-    destination_type: getRegionLabel(state.regionId),
-    destination_detail: buildDestinationDetail(state),
+    activity_type: buildActivityTypeLabel(stateForCalc),
+    destination_type: getRegionLabel(persisted.regionId),
+    destination_detail: buildDestinationDetail(stateForCalc),
     amount,
     is_driving: isDriving,
     is_accommodation: hasAccommodationThisDay,
@@ -555,8 +587,12 @@ export function validateAllowanceInput(
     return { ok: false, message: '国内引率・海外引率・半日のいずれかを選んでください。' }
   }
 
+  const isWorkDay = isWorkDayFromDayType(dayType)
+  const lodgingOnlyOnWorkDay =
+    hasAcc && shouldOmitClubAllowanceOnWorkDay(state, isWorkDay)
+
   if (state.businessType === 'SPORTS' || state.businessType === 'CLUB') {
-    if (!state.subOptionId) {
+    if (!state.subOptionId && !lodgingOnlyOnWorkDay) {
       return { ok: false, message: '業務内容（1日・半日・運転など）を選んでください。' }
     }
   }
@@ -570,17 +606,23 @@ export function validateAllowanceInput(
     }
   }
 
-  if (state.businessType === 'TRIP' && isWorkDayFromDayType(dayType)) {
+  if (state.businessType === 'TRIP' && isWorkDay) {
     return {
       ok: false,
       message: '出張手当は勤務日には支給されません。別の業務の種類を選んでください。',
     }
   }
 
-  if (state.businessType === 'CLUB' && isWorkDayFromDayType(dayType) && isClubNonDrivingSubOption(state.subOptionId)) {
+  if (
+    state.businessType === 'CLUB' &&
+    isWorkDay &&
+    isClubNonDrivingSubOption(state.subOptionId) &&
+    !hasAcc
+  ) {
     return {
       ok: false,
-      message: '部活動指導手当の「1日」「半日」は勤務日には選択できません。マイクロ・大型の運転を選んでください。',
+      message:
+        '部活動指導手当の「1日」「半日」は勤務日には支給されません。運転を選ぶか、業務の種類を選ばずに宿泊業務手当だけ登録してください。',
     }
   }
 
